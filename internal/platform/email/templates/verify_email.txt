@@ -1,0 +1,10 @@
+{{define "subject"}}Verify your email address{{end}}
+{{define "text"}}
+Hi,
+
+Thanks for signing up. Confirm your email address by opening this link:
+
+{{.Link}}
+
+The link is valid for {{.ExpiresIn}}. If you did not sign up, you can ignore this email.
+{{end}}

@@ -1,0 +1,35 @@
+# Correctness-focused lint configuration. `make lint` runs gofmt and go vet
+# unconditionally and golangci-lint when it is installed.
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    - bodyclose
+    - errorlint
+    - rowserrcheck
+    - sqlclosecheck
+    - noctx
+  exclusions:
+    paths:
+      - old
+    rules:
+      - path: _test\.go$
+        linters:
+          - errcheck
+          - bodyclose
+          - noctx
+
+formatters:
+  enable:
+    - gofmt
+  exclusions:
+    paths:
+      - old

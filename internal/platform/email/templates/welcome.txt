@@ -1,0 +1,8 @@
+{{define "subject"}}Welcome!{{end}}
+{{define "text"}}
+Hi,
+
+Your email address is verified and your account is ready.
+
+Log in here: {{.Link}}
+{{end}}

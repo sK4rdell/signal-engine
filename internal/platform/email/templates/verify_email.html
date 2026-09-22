@@ -1,0 +1,10 @@
+{{define "verify_email.html"}}<!doctype html>
+<html>
+  <body style="font-family: -apple-system, Segoe UI, Helvetica, Arial, sans-serif; color: #1f2933;">
+    <p>Hi,</p>
+    <p>Thanks for signing up. Confirm your email address by clicking the button below.</p>
+    <p><a href="{{.Link}}" style="display:inline-block;padding:10px 16px;background:#2563eb;color:#fff;text-decoration:none;border-radius:6px;">Verify email</a></p>
+    <p>Or open this link: <a href="{{.Link}}">{{.Link}}</a></p>
+    <p>The link is valid for {{.ExpiresIn}}. If you did not sign up, you can ignore this email.</p>
+  </body>
+</html>{{end}}

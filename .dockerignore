@@ -1,0 +1,7 @@
+old/
+bin/
+.env
+.git/
+.github/
+docs/
+*.md
