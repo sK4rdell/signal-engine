@@ -63,6 +63,9 @@ jobs:
       - name: Apply migrations to an empty database
         env:
           DATABASE_URL: postgres://app:app@localhost:5432/app_test?sslmode=disable
+          # cmd/migrate loads the full configuration; the development key
+          # is fine here because CI runs with ENV=development.
+          AUTH_ENCRYPTION_KEY: 626574656d706c6174652d6465762d6b65792d646f2d6e6f742d757365212121
         run: |
           ./bin/migrate up
           ./bin/migrate status
