@@ -525,6 +525,41 @@ func TestWorker_ShutdownTimeoutCancelsJobContext(t *testing.T) {
 	}
 }
 
+// TestWorker_ShutdownIsBoundedWhenHandlerIgnoresCancellation covers a
+// handler that never observes ctx.Done(): Run must still return within the
+// shutdown timeout plus the cancel grace period.
+func TestWorker_ShutdownIsBoundedWhenHandlerIgnoresCancellation(t *testing.T) {
+	pool := pgtest.NewPool(t)
+	ctx, cancel := context.WithCancel(context.Background())
+
+	cfg := testConfig()
+	cfg.ShutdownTimeout = 100 * time.Millisecond
+	w := NewWorker(pool, cfg, logging.Discard(), &metrics.Metrics{})
+	started := make(chan struct{})
+	release := make(chan struct{})
+	w.Register("test.stubborn", func(ctx context.Context, job Job) error {
+		close(started)
+		<-release // ignores ctx entirely
+		return nil
+	})
+	t.Cleanup(func() { close(release) })
+	Enqueue(ctx, pool, "test.stubborn", nil)
+
+	runErr := make(chan error, 1)
+	go func() { runErr <- w.Run(ctx) }()
+	<-started
+	cancel()
+
+	select {
+	case err := <-runErr:
+		if err == nil {
+			t.Error("expected a shutdown timeout error")
+		}
+	case <-time.After(cfg.ShutdownTimeout + cancelGracePeriod + 5*time.Second):
+		t.Fatal("Run blocked on a handler that ignores cancellation")
+	}
+}
+
 func TestWorker_RegisterTwicePanics(t *testing.T) {
 	w := NewWorker(nil, testConfig(), logging.Discard(), nil)
 	w.Register("x", func(context.Context, Job) error { return nil })

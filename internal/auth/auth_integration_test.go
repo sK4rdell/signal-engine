@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -274,6 +275,55 @@ func TestResendVerification(t *testing.T) {
 	client.PostJSON("/v1/auth/resend-verification", nil).AssertError(t, http.StatusConflict, auth.CodeEmailAlreadyVerified)
 
 	app.Client().PostJSON("/v1/auth/resend-verification", nil).AssertError(t, http.StatusUnauthorized, apperror.CodeUnauthorized)
+}
+
+// TestResendVerification_ConcurrentRequestsIssueOneToken fires many resend
+// requests at once after the cooldown has elapsed: exactly one may issue a
+// token and email, the rest are rate limited.
+func TestResendVerification_ConcurrentRequestsIssueOneToken(t *testing.T) {
+	app := testutil.NewApp(t, testutil.WithConfig(func(cfg *config.Config) {
+		cfg.Auth.ResendCooldown = time.Hour
+	}))
+	_, body := signup(t, app, "race@example.com")
+	if _, err := app.Pool.Exec(context.Background(), "UPDATE email_verification_tokens SET created_at = now() - interval '2 hours'"); err != nil {
+		t.Fatal(err)
+	}
+	user := testutil.User{ID: body.User.ID, Email: body.User.Email}
+
+	const n = 8
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	statuses := map[int]int{}
+	clients := make([]*testutil.Client, n)
+	for i := range clients {
+		clients[i] = app.AuthenticatedClient(user)
+	}
+	start := make(chan struct{})
+	for _, client := range clients {
+		wg.Add(1)
+		go func(c *testutil.Client) {
+			defer wg.Done()
+			<-start
+			res := c.PostJSON("/v1/auth/resend-verification", nil)
+			mu.Lock()
+			statuses[res.StatusCode]++
+			mu.Unlock()
+		}(client)
+	}
+	close(start)
+	wg.Wait()
+
+	if statuses[http.StatusNoContent] != 1 || statuses[http.StatusTooManyRequests] != n-1 {
+		t.Fatalf("statuses = %v, want one 204 and %d 429", statuses, n-1)
+	}
+	if jobs := app.Jobs(auth.JobSendVerificationEmail); len(jobs) != 2 {
+		t.Errorf("verification jobs = %d, want 2 (signup + one resend)", len(jobs))
+	}
+	var live int
+	_ = app.Pool.QueryRow(context.Background(), "SELECT count(*) FROM email_verification_tokens WHERE consumed_at IS NULL").Scan(&live)
+	if live != 1 {
+		t.Errorf("live tokens = %d, want 1", live)
+	}
 }
 
 // --- login -----------------------------------------------------------------

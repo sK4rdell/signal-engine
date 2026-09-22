@@ -39,23 +39,25 @@ func (s *Service) VerifyEmail(ctx context.Context, token string) error {
 }
 
 // ResendVerification issues a fresh verification token for an unverified
-// user, at most once per configured cooldown.
+// user, at most once per configured cooldown. The whole check-and-issue
+// runs under the user's row lock, so concurrent resends cannot both pass
+// the cooldown and each retire the other's token.
 func (s *Service) ResendVerification(ctx context.Context, userID uuidType) error {
-	user, err := s.repo.GetUserByID(ctx, s.pool, userID)
-	if err != nil {
-		return err
-	}
-	if user.EmailVerifiedAt != nil {
-		return ErrEmailAlreadyVerified
-	}
-	last, ok, err := s.repo.LatestVerificationTokenAt(ctx, s.pool, user.ID)
-	if err != nil {
-		return err
-	}
-	if ok && s.now().Sub(last) < s.cfg.ResendCooldown {
-		return apperror.RateLimited().WithMessage("A verification email was sent recently, try again later")
-	}
 	return s.inTx(ctx, func(tx pgx.Tx) error {
+		user, err := s.repo.GetUserForUpdate(ctx, tx, userID)
+		if err != nil {
+			return err
+		}
+		if user.EmailVerifiedAt != nil {
+			return ErrEmailAlreadyVerified
+		}
+		last, ok, err := s.repo.LatestVerificationTokenAt(ctx, tx, user.ID)
+		if err != nil {
+			return err
+		}
+		if ok && s.now().Sub(last) < s.cfg.ResendCooldown {
+			return apperror.RateLimited().WithMessage("A verification email was sent recently, try again later")
+		}
 		return s.issueVerification(ctx, tx, user)
 	})
 }

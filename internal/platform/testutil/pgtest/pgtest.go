@@ -143,17 +143,8 @@ func ensureTemplate(ctx context.Context, adminURL string) (string, error) {
 		return name, nil
 	}
 
-	// Drop templates left behind by older migration sets.
-	rows, err := conn.Query(ctx, "SELECT datname FROM pg_database WHERE datname LIKE 'tmpl_%' AND datname <> $1", name)
-	if err != nil {
-		return "", fmt.Errorf("list stale templates: %w", err)
-	}
-	stale, err := pgx.CollectRows(rows, pgx.RowTo[string])
-	if err != nil {
-		return "", fmt.Errorf("read stale templates: %w", err)
-	}
-	for _, s := range stale {
-		_, _ = conn.Exec(ctx, "DROP DATABASE IF EXISTS "+pgx.Identifier{s}.Sanitize()+" WITH (FORCE)")
+	if err := dropStaleTemplates(ctx, conn, name); err != nil {
+		return "", err
 	}
 
 	if _, err := conn.Exec(ctx, "CREATE DATABASE "+pgx.Identifier{name}.Sanitize()); err != nil {
@@ -171,6 +162,27 @@ func ensureTemplate(ctx context.Context, adminURL string) (string, error) {
 		return "", fmt.Errorf("migrate template database: %w", migrateErr)
 	}
 	return name, nil
+}
+
+// staleTemplateSQL matches only databases with the exact generated template
+// name format (tmpl_ plus 12 hex characters), never other databases that a
+// LIKE 'tmpl_%' pattern would also match, because they are force-dropped.
+const staleTemplateSQL = `SELECT datname FROM pg_database WHERE datname ~ '^tmpl_[0-9a-f]{12}$' AND datname <> $1`
+
+// dropStaleTemplates removes templates built from older migration sets.
+func dropStaleTemplates(ctx context.Context, conn *pgx.Conn, keep string) error {
+	rows, err := conn.Query(ctx, staleTemplateSQL, keep)
+	if err != nil {
+		return fmt.Errorf("list stale templates: %w", err)
+	}
+	stale, err := pgx.CollectRows(rows, pgx.RowTo[string])
+	if err != nil {
+		return fmt.Errorf("read stale templates: %w", err)
+	}
+	for _, s := range stale {
+		_, _ = conn.Exec(ctx, "DROP DATABASE IF EXISTS "+pgx.Identifier{s}.Sanitize()+" WITH (FORCE)")
+	}
+	return nil
 }
 
 func createDatabase(ctx context.Context, adminURL, name, template string) error {

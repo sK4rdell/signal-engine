@@ -110,11 +110,23 @@ func (w *Worker) Run(ctx context.Context) error {
 		return nil
 	case <-time.After(w.cfg.ShutdownTimeout):
 		cancelJobs()
-		<-done
-		w.logger.Warn("worker stopped after shutdown timeout; in-flight jobs were cancelled", "worker_id", w.id)
+		// A handler that ignores cancellation cannot be stopped from here.
+		// Wait a bounded grace period for it, then return anyway so process
+		// shutdown stays bounded; the job is reclaimed by another worker once
+		// its lock times out.
+		select {
+		case <-done:
+			w.logger.Warn("worker stopped after shutdown timeout; in-flight jobs were cancelled", "worker_id", w.id)
+		case <-time.After(cancelGracePeriod):
+			w.logger.Error("worker abandoned a job handler that ignored cancellation", "worker_id", w.id)
+		}
 		return errors.New("jobs: shutdown timeout exceeded")
 	}
 }
+
+// cancelGracePeriod bounds how long Run waits for handlers after their
+// context has been cancelled.
+const cancelGracePeriod = 5 * time.Second
 
 func (w *Worker) loop(ctx, jobCtx context.Context) {
 	for {

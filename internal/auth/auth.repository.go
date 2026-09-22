@@ -79,6 +79,22 @@ func (r *Repository) GetUserByID(ctx context.Context, db database.DBTX, id uuid.
 	return u, nil
 }
 
+const lockUserForUpdateSQL = `SELECT ` + userColumns + ` FROM users WHERE id = $1 FOR NO KEY UPDATE`
+
+// GetUserForUpdate loads a user and holds a row lock until the transaction
+// ends, serialising operations that must observe and change the user's
+// tokens without interleaving (the same lock createToken takes).
+func (r *Repository) GetUserForUpdate(ctx context.Context, tx pgx.Tx, id uuid.UUID) (User, error) {
+	u, err := scanUser(tx.QueryRow(ctx, lockUserForUpdateSQL, id))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return User{}, ErrUserNotFound
+	}
+	if err != nil {
+		return User{}, fmt.Errorf("auth: lock user: %w", err)
+	}
+	return u, nil
+}
+
 const markEmailVerifiedSQL = `
 	UPDATE users
 	SET email_verified_at = $2, updated_at = now()
@@ -101,6 +117,25 @@ const updatePasswordHashSQL = `
 	SET password_hash = $2, updated_at = now()
 	WHERE id = $1
 `
+
+const rehashPasswordSQL = `
+	UPDATE users
+	SET password_hash = $3, updated_at = now()
+	WHERE id = $1
+	  AND password_hash = $2
+`
+
+// RehashPassword replaces the password hash only if the stored hash is
+// still verifiedHash. It reports false when the hash changed in between
+// (for example a concurrent password reset), so a login can never resurrect
+// an old credential by upgrading its cost parameters.
+func (r *Repository) RehashPassword(ctx context.Context, db database.DBTX, userID uuid.UUID, verifiedHash, newHash string) (bool, error) {
+	tag, err := db.Exec(ctx, rehashPasswordSQL, userID, verifiedHash, newHash)
+	if err != nil {
+		return false, fmt.Errorf("auth: rehash password: %w", err)
+	}
+	return tag.RowsAffected() == 1, nil
+}
 
 // UpdatePasswordHash replaces the user's password hash.
 func (r *Repository) UpdatePasswordHash(ctx context.Context, db database.DBTX, userID uuid.UUID, hash string) error {

@@ -38,9 +38,11 @@ func (s *Service) Login(ctx context.Context, email, plainPassword string) (Login
 	}
 
 	if password.NeedsRehash(user.PasswordHash) {
-		// Best effort: a failed upgrade must not block the login.
+		// Best effort: a failed upgrade must not block the login. The update
+		// is conditional on the hash that was just verified, so a password
+		// reset that lands in between is never overwritten.
 		if hash, err := password.Hash(plainPassword); err == nil {
-			if err := s.repo.UpdatePasswordHash(ctx, s.pool, user.ID, hash); err != nil {
+			if _, err := s.repo.RehashPassword(ctx, s.pool, user.ID, user.PasswordHash, hash); err != nil {
 				logging.FromContext(ctx).Warn("password rehash failed", "user_id", user.ID, "error", err)
 			}
 		}

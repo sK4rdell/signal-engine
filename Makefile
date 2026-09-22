@@ -12,6 +12,10 @@ TEST_MAILPIT_URL  ?= http://localhost:8025
 # .env when it exists; explicit assignments on the command line still win.
 LOAD_ENV := set -a; [ -f .env ] && . ./.env; set +a;
 
+# Database for the migrate targets: `make DATABASE_URL=... migrate` (a Make
+# variable) wins over .env, which wins over the compose default.
+MIGRATE_DATABASE_URL = $(or $(DATABASE_URL),$${DATABASE_URL:-$(DEV_DATABASE_URL)})
+
 .PHONY: help
 help: ## Show available targets
 	@grep -hE '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) \
@@ -79,15 +83,15 @@ reset-db: ## Destroy the local database volume, recreate it and migrate
 
 .PHONY: migrate
 migrate: ## Apply all pending migrations
-	$(LOAD_ENV) DATABASE_URL="$${DATABASE_URL:-$(DEV_DATABASE_URL)}" go run ./cmd/migrate up
+	$(LOAD_ENV) DATABASE_URL="$(MIGRATE_DATABASE_URL)" go run ./cmd/migrate up
 
 .PHONY: migrate-down
 migrate-down: ## Roll back the most recent migration
-	$(LOAD_ENV) DATABASE_URL="$${DATABASE_URL:-$(DEV_DATABASE_URL)}" go run ./cmd/migrate down
+	$(LOAD_ENV) DATABASE_URL="$(MIGRATE_DATABASE_URL)" go run ./cmd/migrate down
 
 .PHONY: migration-status
 migration-status: ## Show migration status
-	$(LOAD_ENV) DATABASE_URL="$${DATABASE_URL:-$(DEV_DATABASE_URL)}" go run ./cmd/migrate status
+	$(LOAD_ENV) DATABASE_URL="$(MIGRATE_DATABASE_URL)" go run ./cmd/migrate status
 
 .PHONY: migration
 migration: ## Scaffold a migration: make migration name=create_foo

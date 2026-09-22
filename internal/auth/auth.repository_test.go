@@ -88,6 +88,26 @@ func TestRepository_Users(t *testing.T) {
 	if err := repo.UpdatePasswordHash(ctx, pool, uuid.New(), "x"); !errors.Is(err, ErrUserNotFound) {
 		t.Errorf("update unknown user error = %v", err)
 	}
+
+	// A rehash only applies while the verified hash is still current: a
+	// concurrent reset (simulated by the UpdatePasswordHash above, which
+	// moved "hash" to "new") must not be overwritten.
+	ok, err := repo.RehashPassword(ctx, pool, u.ID, "hash", "upgraded-from-stale")
+	if err != nil || ok {
+		t.Errorf("stale rehash = %v, %v, want false", ok, err)
+	}
+	got, _ = repo.GetUserByID(ctx, pool, u.ID)
+	if got.PasswordHash != "new" {
+		t.Errorf("stale rehash overwrote the password: %q", got.PasswordHash)
+	}
+	ok, err = repo.RehashPassword(ctx, pool, u.ID, "new", "upgraded")
+	if err != nil || !ok {
+		t.Errorf("current rehash = %v, %v, want true", ok, err)
+	}
+	got, _ = repo.GetUserByID(ctx, pool, u.ID)
+	if got.PasswordHash != "upgraded" {
+		t.Errorf("PasswordHash = %q", got.PasswordHash)
+	}
 }
 
 func TestRepository_Sessions(t *testing.T) {
