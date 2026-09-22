@@ -185,6 +185,20 @@ PATCH  /v1/accounts/{accountID}/examples/{exampleID}
 DELETE /v1/accounts/{accountID}/examples/{exampleID}
 ```
 
+### Renaming the project
+
+The template's module path is `betemplate`. Rename it once when starting a
+product:
+
+```bash
+make rename module=github.com/acme/widgets        # short name defaults to "widgets"
+make rename module=github.com/acme/widgets name=widgets-api
+```
+
+The script rewrites `go.mod`, every import, the Docker image tag and the
+email MIME boundary, then runs `go mod tidy`, `go build` and `go vet`. It
+reads the current name from `go.mod`, so it can be run again later.
+
 ### Adding a feature
 
 1. Create `internal/<feature>/` with `<feature>.model.go`,

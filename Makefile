@@ -100,6 +100,11 @@ migration: ## Scaffold a migration: make migration name=create_foo
 	printf -- '-- +goose Up\n\n\n-- +goose Down\n\n' > "$$file"; \
 	echo "created $$file"
 
+.PHONY: rename
+rename: ## Rename the project: make rename module=github.com/acme/widgets [name=widgets]
+	@test -n "$(module)" || { echo "usage: make rename module=github.com/acme/widgets [name=widgets]"; exit 1; }
+	scripts/rename.sh "$(module)" $(name)
+
 .PHONY: docker-build
 docker-build: ## Build the production image
 	docker build -t betemplate:local .

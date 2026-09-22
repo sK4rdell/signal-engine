@@ -149,7 +149,7 @@ func TestSMTPSender_DeliversToMailpit(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	subject := "betemplate test " + time.Now().Format(time.RFC3339Nano)
+	subject := "smtp integration test " + time.Now().Format(time.RFC3339Nano)
 	sender := NewSMTPSender(config.SMTPConfig{Host: host, Port: port}, "no-reply@example.com")
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
