@@ -38,3 +38,27 @@ func TestParseWindow(t *testing.T) {
 		}
 	}
 }
+
+func TestParseKlimatklivetOptions(t *testing.T) {
+	opts, err := parseKlimatklivetOptions("", "", false)
+	if err != nil || !opts.From.IsZero() || !opts.To.IsZero() || opts.Force {
+		t.Errorf("defaults = %+v, %v", opts, err)
+	}
+	opts, err = parseKlimatklivetOptions("2025-01-01", "", true)
+	if err != nil || opts.From.Format(dateLayout) != "2025-01-01" || !opts.To.IsZero() || !opts.Force {
+		t.Errorf("from only = %+v, %v", opts, err)
+	}
+	opts, err = parseKlimatklivetOptions("2025-01-01", "2026-06-30", false)
+	if err != nil || opts.From.Format(dateLayout) != "2025-01-01" || opts.To.Format(dateLayout) != "2026-06-30" {
+		t.Errorf("both = %+v, %v", opts, err)
+	}
+	for name, in := range map[string][2]string{
+		"reversed": {"2026-06-30", "2025-01-01"},
+		"bad from": {"jan 2025", ""},
+		"bad to":   {"", "2026-6-30"},
+	} {
+		if _, err := parseKlimatklivetOptions(in[0], in[1], false); err == nil {
+			t.Errorf("%s: expected error", name)
+		}
+	}
+}

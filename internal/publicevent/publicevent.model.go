@@ -20,7 +20,10 @@ import (
 
 // Sources known to the domain. The value is stored on observations and
 // events and accepted by the source filter of the listing.
-const SourceArbetsmiljoverket = "arbetsmiljoverket"
+const (
+	SourceArbetsmiljoverket = "arbetsmiljoverket"
+	SourceKlimatklivet      = "klimatklivet"
+)
 
 // EventType says what happened, independently of which source reported it.
 type EventType string
@@ -31,6 +34,10 @@ const (
 	// inspected a workplace, found deficiencies and issued a written notice
 	// to the employer.
 	EventTypeWorkEnvironmentInspectionNotice EventType = "WORK_ENVIRONMENT_INSPECTION_NOTICE"
+	// EventTypeClimateInvestmentGrantApproved: a public authority approved a
+	// grant for a specific climate investment by an identifiable
+	// organisation. The date is the decision date.
+	EventTypeClimateInvestmentGrantApproved EventType = "CLIMATE_INVESTMENT_GRANT_APPROVED"
 )
 
 // SourceObservation is one observed state of one source record.

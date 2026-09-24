@@ -155,6 +155,13 @@ type JobsConfig struct {
 // SourcesConfig configures the public data sources read by cmd/ingest.
 type SourcesConfig struct {
 	Arbetsmiljoverket ArbetsmiljoverketConfig
+	Klimatklivet      KlimatklivetConfig
+}
+
+// KlimatklivetConfig configures the Naturvårdsverket Klimatklivet client.
+type KlimatklivetConfig struct {
+	// BaseURL is the origin of naturvardsverket.se; overridable for tests.
+	BaseURL string
 }
 
 // ArbetsmiljoverketConfig configures the Arbetsmiljöverket web diary client.
@@ -250,6 +257,9 @@ func LoadFrom(lookup Lookup) (Config, error) {
 		Arbetsmiljoverket: ArbetsmiljoverketConfig{
 			BaseURL:         e.str("ARBETSMILJOVERKET_BASE_URL", "https://www.av.se"),
 			RequestInterval: e.duration("ARBETSMILJOVERKET_REQUEST_INTERVAL", time.Second),
+		},
+		Klimatklivet: KlimatklivetConfig{
+			BaseURL: e.str("KLIMATKLIVET_BASE_URL", "https://www.naturvardsverket.se"),
 		},
 	}
 
@@ -362,6 +372,9 @@ func (c Config) validate() error {
 	}
 	if c.Sources.Arbetsmiljoverket.RequestInterval < 0 {
 		fail("ARBETSMILJOVERKET_REQUEST_INTERVAL must not be negative")
+	}
+	if err := validateOrigin(c.Sources.Klimatklivet.BaseURL); err != nil {
+		fail("KLIMATKLIVET_BASE_URL: %w", err)
 	}
 
 	if c.Environment == Production {

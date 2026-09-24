@@ -88,8 +88,8 @@ func toResponse(e PublicEvent) Response {
 
 // ListRequest binds the query of GET /v1/public-events.
 type ListRequest struct {
-	Source             string `query:"source" json:"-" validate:"omitempty,oneof=arbetsmiljoverket"`
-	EventType          string `query:"event_type" json:"-" validate:"omitempty,oneof=WORK_ENVIRONMENT_INSPECTION_NOTICE"`
+	Source             string `query:"source" json:"-" validate:"omitempty,oneof=arbetsmiljoverket klimatklivet"`
+	EventType          string `query:"event_type" json:"-" validate:"omitempty,oneof=WORK_ENVIRONMENT_INSPECTION_NOTICE CLIMATE_INVESTMENT_GRANT_APPROVED"`
 	From               string `query:"from" json:"-" validate:"omitempty,datetime=2006-01-02"`
 	To                 string `query:"to" json:"-" validate:"omitempty,datetime=2006-01-02"`
 	OrganisationNumber string `query:"organisation_number" json:"-" validate:"omitempty,max=20"`

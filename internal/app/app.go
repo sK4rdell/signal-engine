@@ -23,6 +23,7 @@ import (
 	"github.com/sK4rdell/signal-engine/internal/platform/server"
 	"github.com/sK4rdell/signal-engine/internal/publicevent"
 	"github.com/sK4rdell/signal-engine/internal/source/arbetsmiljoverket"
+	"github.com/sK4rdell/signal-engine/internal/source/klimatklivet"
 )
 
 // Deps are the infrastructure values the application is built from.
@@ -44,6 +45,8 @@ type App struct {
 
 	// Arbetsmiljoverket ingests inspection notices; run by cmd/ingest.
 	Arbetsmiljoverket *arbetsmiljoverket.Ingester
+	// Klimatklivet ingests approved climate investment grants; run by cmd/ingest.
+	Klimatklivet *klimatklivet.Ingester
 }
 
 // New wires the application. The router serves the API; the worker has every
@@ -96,6 +99,10 @@ func New(deps Deps) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
+	kkClient, err := klimatklivet.NewClient(deps.Config.Sources.Klimatklivet, nil)
+	if err != nil {
+		return nil, err
+	}
 
 	return &App{
 		Router:            router,
@@ -103,5 +110,6 @@ func New(deps Deps) (*App, error) {
 		Auth:              authService,
 		Accounts:          accountRepo,
 		Arbetsmiljoverket: arbetsmiljoverket.NewIngester(avClient, publicEventRepo, deps.Pool, deps.Logger),
+		Klimatklivet:      klimatklivet.NewIngester(kkClient, publicEventRepo, deps.Pool, deps.Logger),
 	}, nil
 }

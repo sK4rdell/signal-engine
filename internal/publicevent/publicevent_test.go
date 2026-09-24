@@ -18,6 +18,8 @@ import (
 const base = "/v1/public-events"
 
 type seedEvent struct {
+	source       string
+	eventType    publicevent.EventType
 	id           string
 	occurredOn   string
 	orgNr        string
@@ -33,8 +35,14 @@ func seed(t *testing.T, app *testutil.App, s seedEvent) publicevent.PublicEvent 
 	t.Helper()
 	ctx := context.Background()
 	repo := publicevent.NewRepository()
+	if s.source == "" {
+		s.source = publicevent.SourceArbetsmiljoverket
+	}
+	if s.eventType == "" {
+		s.eventType = publicevent.EventTypeWorkEnvironmentInspectionNotice
+	}
 	obs, _, err := repo.RecordObservation(ctx, app.Pool, publicevent.NewObservation{
-		Source:         publicevent.SourceArbetsmiljoverket,
+		Source:         s.source,
 		SourceRecordID: s.id,
 		SourceURL:      "https://www.av.se/diarium?p=1",
 		Payload:        map[string]string{"document_number": s.id, "case_status": s.payloadState},
@@ -48,9 +56,9 @@ func seed(t *testing.T, app *testutil.App, s seedEvent) publicevent.PublicEvent 
 		t.Fatal(err)
 	}
 	e, _, err := repo.UpsertEvent(ctx, app.Pool, publicevent.NewEvent{
-		Source:             publicevent.SourceArbetsmiljoverket,
+		Source:             s.source,
 		SourceEventID:      s.id,
-		EventType:          publicevent.EventTypeWorkEnvironmentInspectionNotice,
+		EventType:          s.eventType,
 		OccurredOn:         on,
 		Title:              s.title,
 		OrganisationNumber: s.orgNr,
@@ -224,5 +232,50 @@ func TestPublicEvents_CursorPaginationIsDeterministic(t *testing.T) {
 		if i > 0 && strings.SplitN(seen[i-1], "@", 2)[1] < strings.SplitN(s, "@", 2)[1] {
 			t.Errorf("not newest first: %v", seen)
 		}
+	}
+}
+
+func TestPublicEvents_SourceAndTypeFiltersAcrossSources(t *testing.T) {
+	app := testutil.NewApp(t)
+	client := app.AuthenticatedClient(app.CreateUser())
+
+	seed(t, app, seedEvent{id: "2026/060943-2", occurredOn: "2026-09-23", orgNr: "5594800418", orgName: "MITTEN MACK AB", title: "Inspektion inom Fortlöpande tillsyn - Unga i arbetslivet"})
+	seed(t, app, seedEvent{source: publicevent.SourceKlimatklivet, eventType: publicevent.EventTypeClimateInvestmentGrantApproved, id: "NV-25-043146", occurredOn: "2025-12-18", orgName: "Orkla Snacks Sverige AB", title: "Energikonvertering industri", payloadState: "Pågående åtgärd"})
+
+	ids := func(path string) []string {
+		t.Helper()
+		var list publicevent.ListResponse
+		client.Get(path).AssertStatus(t, http.StatusOK).DecodeJSON(t, &list)
+		out := make([]string, 0, len(list.Items))
+		for _, item := range list.Items {
+			out = append(out, item.Source.Name+":"+item.Source.SourceEventID)
+		}
+		return out
+	}
+	if got := ids(base); strings.Join(got, ",") != "arbetsmiljoverket:2026/060943-2,klimatklivet:NV-25-043146" {
+		t.Errorf("all = %v", got)
+	}
+	if got := ids(base + "?source=klimatklivet"); strings.Join(got, ",") != "klimatklivet:NV-25-043146" {
+		t.Errorf("source=klimatklivet = %v", got)
+	}
+	if got := ids(base + "?source=arbetsmiljoverket"); strings.Join(got, ",") != "arbetsmiljoverket:2026/060943-2" {
+		t.Errorf("source=arbetsmiljoverket = %v", got)
+	}
+	if got := ids(base + "?event_type=CLIMATE_INVESTMENT_GRANT_APPROVED"); strings.Join(got, ",") != "klimatklivet:NV-25-043146" {
+		t.Errorf("event_type filter = %v", got)
+	}
+	if got := ids(base + "?source=klimatklivet&event_type=WORK_ENVIRONMENT_INSPECTION_NOTICE"); len(got) != 0 {
+		t.Errorf("mismatched source and type = %v", got)
+	}
+
+	// A grant event has no organisation number and no workplace, but keeps
+	// the organisation name and its provenance record.
+	var list publicevent.ListResponse
+	client.Get(base+"?source=klimatklivet").AssertStatus(t, http.StatusOK).DecodeJSON(t, &list)
+	got := list.Items[0]
+	if got.EventType != publicevent.EventTypeClimateInvestmentGrantApproved || got.OccurredOn != "2025-12-18" ||
+		got.Organisation == nil || got.Organisation.OrganisationNumber != nil || got.Organisation.Name != "Orkla Snacks Sverige AB" ||
+		got.Workplace != nil || !strings.Contains(string(got.Source.Record), "NV-25-043146") {
+		t.Errorf("grant event = %+v", got)
 	}
 }

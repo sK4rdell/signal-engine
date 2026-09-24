@@ -252,6 +252,9 @@ func TestLoadFrom_SourcesDefaultsAndValidation(t *testing.T) {
 	if cfg.Sources.Arbetsmiljoverket.BaseURL != "https://www.av.se" || cfg.Sources.Arbetsmiljoverket.RequestInterval != time.Second {
 		t.Errorf("defaults = %+v", cfg.Sources.Arbetsmiljoverket)
 	}
+	if cfg.Sources.Klimatklivet.BaseURL != "https://www.naturvardsverket.se" {
+		t.Errorf("klimatklivet defaults = %+v", cfg.Sources.Klimatklivet)
+	}
 
 	cfg, err = LoadFrom(lookupFrom(map[string]string{
 		"DATABASE_URL":                       "postgres://app:app@localhost:5432/app?sslmode=disable",
@@ -274,8 +277,8 @@ func TestLoadFrom_SourcesDefaultsAndValidation(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			values["DATABASE_URL"] = "postgres://app:app@localhost:5432/app?sslmode=disable"
 			_, err := LoadFrom(lookupFrom(values))
-			if err == nil || !strings.Contains(err.Error(), "ARBETSMILJOVERKET_") {
-				t.Fatalf("expected an ARBETSMILJOVERKET_ error, got %v", err)
+			if err == nil || (!strings.Contains(err.Error(), "ARBETSMILJOVERKET_") && !strings.Contains(err.Error(), "KLIMATKLIVET_")) {
+				t.Fatalf("expected a source configuration error, got %v", err)
 			}
 		})
 	}

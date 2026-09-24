@@ -62,6 +62,7 @@ make dev               run the API locally (sources .env)
 make worker            run the background worker locally
 make build             build bin/api, bin/worker, bin/migrate, bin/ingest
 make ingest            ingest Arbetsmiljöverket inspection notices (from=, to=)
+make ingest-klimatklivet  ingest Klimatklivet approved grants (from=, to=, force=1)
 make test              run all tests against the compose PostgreSQL and Mailpit
 make test-race         same, with the race detector
 make lint              gofmt check, go vet, golangci-lint (when installed)
@@ -92,12 +93,14 @@ make migration name=create_widgets # scaffold migrations/<timestamp>_create_widg
 
 ## 4b. Ingesting public events
 
-Signal Engine turns public records into public events. The first source is
-Arbetsmiljöverket's web diary (`docs/sources/arbetsmiljoverket.md`):
+Signal Engine turns public records into public events. Sources so far:
+Arbetsmiljöverket's web diary (`docs/sources/arbetsmiljoverket.md`) and
+Naturvårdsverket's Klimatklivet grant list (`docs/sources/klimatklivet.md`):
 
 ```bash
-make ingest from=2026-09-20 to=2026-09-23   # inclusive dates; defaults to yesterday
-curl -s -b cookies 'localhost:8080/v1/public-events?from=2026-09-20&limit=100'
+make ingest from=2026-09-20 to=2026-09-23        # Arbetsmiljöverket; inclusive dates, default yesterday
+make ingest-klimatklivet from=2025-01-01         # Klimatklivet; decision-date window, default all
+curl -s -b cookies 'localhost:8080/v1/public-events?source=klimatklivet&limit=100'
 ```
 
 Re-running a window is idempotent. See `docs/public-events.md` for the
@@ -156,7 +159,7 @@ cmd/
   api/            HTTP server (optionally with embedded worker)
   worker/         background job worker
   migrate/        goose migrations: up | down | status | version
-  ingest/         manual source ingestion: ingest arbetsmiljoverket --from --to
+  ingest/         manual source ingestion: ingest arbetsmiljoverket|klimatklivet --from --to
 internal/
   app/            composition root: wires config, infrastructure, features, routes, jobs
   auth/           users, sessions, signup/login/logout, email verification, password reset
@@ -165,6 +168,7 @@ internal/
   publicevent/    source observations, canonical public events, GET /v1/public-events
   source/
     arbetsmiljoverket/  web diary client, parser and ingester (source-specific code only)
+    klimatklivet/       dataset discovery, Excel parser and ingester (source-specific code only)
   platform/
     api/          typed handler wrapper, binding, strict JSON, validation, errors, middleware, router
     apperror/     application error type and stable public codes

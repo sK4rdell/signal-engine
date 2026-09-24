@@ -96,11 +96,28 @@ Response shape:
 the observation payload the event was derived from, so a reader can always
 see the source's own words next to our canonical reading.
 
+## Event types and sources
+
+| Event type | Source | Meaning | Date |
+| --- | --- | --- | --- |
+| `WORK_ENVIRONMENT_INSPECTION_NOTICE` | `arbetsmiljoverket` | an inspection found deficiencies and a written notice was sent to the employer | document date |
+| `CLIMATE_INVESTMENT_GRANT_APPROVED` | `klimatklivet` | Naturvårdsverket approved a grant for a specific climate investment | decision date |
+
+An event's date is the real-world date the source reports, never the
+ingestion time; `first_observed_at` records when we first saw the record.
+A dataset published long after its decisions (Klimatklivet is semi-annual)
+therefore produces events dated months before they were observed.
+
+Source-specific facts (grant amounts, categories, case status, workplace
+identifiers beyond CFAR, and so on) stay in the observation payload and
+are returned as `source.record`.
+
 ## Ingestion
 
 ```bash
 make ingest from=2026-09-20 to=2026-09-23   # go run ./cmd/ingest arbetsmiljoverket --from … --to …
+make ingest-klimatklivet from=2025-01-01    # go run ./cmd/ingest klimatklivet --from … [--to …] [--force]
 ```
 
-There is no scheduler; the command is run by hand. Source specifics are in
-`docs/sources/`.
+There is no scheduler; the commands are run by hand. Source specifics are
+in `docs/sources/`, commercial evaluations in `docs/evaluations/`.

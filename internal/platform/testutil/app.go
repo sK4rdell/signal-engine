@@ -24,6 +24,7 @@ import (
 	"github.com/sK4rdell/signal-engine/internal/platform/password"
 	"github.com/sK4rdell/signal-engine/internal/platform/testutil/pgtest"
 	"github.com/sK4rdell/signal-engine/internal/source/arbetsmiljoverket"
+	"github.com/sK4rdell/signal-engine/internal/source/klimatklivet"
 )
 
 // AllowedOrigin is the browser origin the test configuration trusts.
@@ -47,6 +48,9 @@ type App struct {
 	// Arbetsmiljoverket is the ingester wired by app.New. Point it at a
 	// local server with WithConfig (Sources.Arbetsmiljoverket.BaseURL).
 	Arbetsmiljoverket *arbetsmiljoverket.Ingester
+	// Klimatklivet is the ingester wired by app.New. Point it at a local
+	// server with WithConfig (Sources.Klimatklivet.BaseURL).
+	Klimatklivet *klimatklivet.Ingester
 
 	logs *lockedBuffer
 }
@@ -99,6 +103,7 @@ func NewApp(t testing.TB, opts ...Option) *App {
 		Metrics: m,
 
 		Arbetsmiljoverket: application.Arbetsmiljoverket,
+		Klimatklivet:      application.Klimatklivet,
 		logs:              logs,
 	}
 }

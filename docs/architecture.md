@@ -500,7 +500,10 @@ Prefer some duplication to the wrong shared abstraction.
 Source adapters live under `internal/source/<source>` and own every
 source-specific concern (requests, pagination, parsing, identifiers,
 normalisation). They depend on `internal/publicevent`, never the other way
-round, and never on each other. `publicevent` stores what a source showed
+round, and never on each other. Two adapters exist (`arbetsmiljoverket`,
+`klimatklivet`); each is a plain package with a client, a parser and an
+ingester, and no shared adapter interface: the small overlap (stats, a
+per-row transaction, a status error type) is duplicated on purpose. `publicevent` stores what a source showed
 us (append-only observations) separately from our canonical reading
 (events). See `docs/public-events.md`.
 

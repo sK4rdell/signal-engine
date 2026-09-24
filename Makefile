@@ -33,6 +33,10 @@ worker: ## Run the background worker locally (sources .env)
 ingest: ## Ingest Arbetsmiljöverket inspection notices: make ingest from=2026-09-20 to=2026-09-23
 	$(LOAD_ENV) go run ./cmd/ingest arbetsmiljoverket $(if $(from),--from $(from)) $(if $(to),--to $(to))
 
+.PHONY: ingest-klimatklivet
+ingest-klimatklivet: ## Ingest Klimatklivet approved grants: make ingest-klimatklivet from=2025-01-01 [to=…] [force=1]
+	$(LOAD_ENV) go run ./cmd/ingest klimatklivet $(if $(from),--from $(from)) $(if $(to),--to $(to)) $(if $(force),--force)
+
 .PHONY: build
 build: ## Build all binaries into bin/
 	CGO_ENABLED=0 go build -trimpath -o bin/ ./cmd/...
