@@ -241,3 +241,42 @@ func TestLoadFrom_ProductionCannotDisableSecureCookie(t *testing.T) {
 		t.Fatalf("expected cookie error, got %v", err)
 	}
 }
+
+func TestLoadFrom_SourcesDefaultsAndValidation(t *testing.T) {
+	cfg, err := LoadFrom(lookupFrom(map[string]string{
+		"DATABASE_URL": "postgres://app:app@localhost:5432/app?sslmode=disable",
+	}))
+	if err != nil {
+		t.Fatalf("LoadFrom: %v", err)
+	}
+	if cfg.Sources.Arbetsmiljoverket.BaseURL != "https://www.av.se" || cfg.Sources.Arbetsmiljoverket.RequestInterval != time.Second {
+		t.Errorf("defaults = %+v", cfg.Sources.Arbetsmiljoverket)
+	}
+
+	cfg, err = LoadFrom(lookupFrom(map[string]string{
+		"DATABASE_URL":                       "postgres://app:app@localhost:5432/app?sslmode=disable",
+		"ARBETSMILJOVERKET_BASE_URL":         "http://127.0.0.1:9999",
+		"ARBETSMILJOVERKET_REQUEST_INTERVAL": "0",
+	}))
+	if err != nil {
+		t.Fatalf("LoadFrom: %v", err)
+	}
+	if cfg.Sources.Arbetsmiljoverket.BaseURL != "http://127.0.0.1:9999" || cfg.Sources.Arbetsmiljoverket.RequestInterval != 0 {
+		t.Errorf("overrides = %+v", cfg.Sources.Arbetsmiljoverket)
+	}
+
+	for name, values := range map[string]map[string]string{
+		"base url with path": {"ARBETSMILJOVERKET_BASE_URL": "https://www.av.se/diarium/"},
+		"base url not a url": {"ARBETSMILJOVERKET_BASE_URL": "av.se"},
+		"negative interval":  {"ARBETSMILJOVERKET_REQUEST_INTERVAL": "-1s"},
+		"malformed interval": {"ARBETSMILJOVERKET_REQUEST_INTERVAL": "soon"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			values["DATABASE_URL"] = "postgres://app:app@localhost:5432/app?sslmode=disable"
+			_, err := LoadFrom(lookupFrom(values))
+			if err == nil || !strings.Contains(err.Error(), "ARBETSMILJOVERKET_") {
+				t.Fatalf("expected an ARBETSMILJOVERKET_ error, got %v", err)
+			}
+		})
+	}
+}

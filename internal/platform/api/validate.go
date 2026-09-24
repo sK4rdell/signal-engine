@@ -124,6 +124,8 @@ func fieldMessage(fe validator.FieldError) string {
 		return "must contain only letters and digits"
 	case "boolean":
 		return "must be true or false"
+	case "datetime":
+		return "must be a date formatted like " + fe.Param()
 	}
 	return "is invalid"
 }

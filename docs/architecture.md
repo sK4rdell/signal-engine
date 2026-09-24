@@ -38,12 +38,16 @@ cmd/
   api/
   worker/
   migrate/
+  ingest/         manual, bounded source ingestion (no scheduler)
 
 internal/
   app/            composition root shared by cmd/* and the test harness
   auth/
   account/
   example/        example feature, delete when starting a product
+  publicevent/    domain: source observations, public events, their API
+  source/
+    <source>/     one package per public source: client, parser, ingester
   <product features>/
 
   platform/
@@ -488,6 +492,17 @@ Do not create:
 until a real product requires them.
 
 Prefer some duplication to the wrong shared abstraction.
+
+---
+
+# 19b. Sources and public events
+
+Source adapters live under `internal/source/<source>` and own every
+source-specific concern (requests, pagination, parsing, identifiers,
+normalisation). They depend on `internal/publicevent`, never the other way
+round, and never on each other. `publicevent` stores what a source showed
+us (append-only observations) separately from our canonical reading
+(events). See `docs/public-events.md`.
 
 ---
 

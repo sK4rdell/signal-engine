@@ -40,6 +40,7 @@ type Config struct {
 	Auth        AuthConfig
 	Email       EmailConfig
 	Jobs        JobsConfig
+	Sources     SourcesConfig
 }
 
 // LogConfig controls the structured logger.
@@ -151,6 +152,21 @@ type JobsConfig struct {
 	WorkerInAPI bool
 }
 
+// SourcesConfig configures the public data sources read by cmd/ingest.
+type SourcesConfig struct {
+	Arbetsmiljoverket ArbetsmiljoverketConfig
+}
+
+// ArbetsmiljoverketConfig configures the Arbetsmiljöverket web diary client.
+type ArbetsmiljoverketConfig struct {
+	// BaseURL is the origin of the web diary. It exists so tests can point
+	// the client at a local server; production uses the public site.
+	BaseURL string
+	// RequestInterval is the minimum time between two requests to the
+	// source, so a full ingestion run stays polite.
+	RequestInterval time.Duration
+}
+
 // Load reads the configuration from the process environment.
 func Load() (Config, error) {
 	return LoadFrom(os.LookupEnv)
@@ -228,6 +244,13 @@ func LoadFrom(lookup Lookup) (Config, error) {
 		LockTimeout:     e.duration("JOBS_LOCK_TIMEOUT", 5*time.Minute),
 		ShutdownTimeout: e.duration("JOBS_SHUTDOWN_TIMEOUT", 30*time.Second),
 		WorkerInAPI:     e.bool("JOBS_WORKER_IN_API", false),
+	}
+
+	cfg.Sources = SourcesConfig{
+		Arbetsmiljoverket: ArbetsmiljoverketConfig{
+			BaseURL:         e.str("ARBETSMILJOVERKET_BASE_URL", "https://www.av.se"),
+			RequestInterval: e.duration("ARBETSMILJOVERKET_REQUEST_INTERVAL", time.Second),
+		},
 	}
 
 	if len(e.errs) > 0 {
@@ -332,6 +355,13 @@ func (c Config) validate() error {
 	}
 	if c.Jobs.LockTimeout < c.Jobs.JobTimeout {
 		fail("JOBS_LOCK_TIMEOUT must not be shorter than JOBS_JOB_TIMEOUT")
+	}
+
+	if err := validateOrigin(c.Sources.Arbetsmiljoverket.BaseURL); err != nil {
+		fail("ARBETSMILJOVERKET_BASE_URL: %w", err)
+	}
+	if c.Sources.Arbetsmiljoverket.RequestInterval < 0 {
+		fail("ARBETSMILJOVERKET_REQUEST_INTERVAL must not be negative")
 	}
 
 	if c.Environment == Production {

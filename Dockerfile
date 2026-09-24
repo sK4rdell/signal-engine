@@ -20,7 +20,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 # ---- runtime ---------------------------------------------------------------
 FROM gcr.io/distroless/static-debian12:nonroot
 
-COPY --from=build /out/api /out/worker /out/migrate /app/
+COPY --from=build /out/api /out/worker /out/migrate /out/ingest /app/
 
 USER nonroot:nonroot
 WORKDIR /app
@@ -32,4 +32,5 @@ EXPOSE 8080
 #   api     -> /app/api
 #   worker  -> /app/worker
 #   migrate -> /app/migrate up
+#   ingest  -> /app/ingest arbetsmiljoverket --from ... --to ...
 ENTRYPOINT ["/app/api"]
