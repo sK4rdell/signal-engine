@@ -9,7 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"betemplate/internal/platform/database"
+	"github.com/sK4rdell/signal-engine/internal/platform/database"
 )
 
 // Repository persists users, sessions and security tokens. Every method

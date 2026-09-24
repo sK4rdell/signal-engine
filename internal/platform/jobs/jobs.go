@@ -21,7 +21,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"betemplate/internal/platform/database"
+	"github.com/sK4rdell/signal-engine/internal/platform/database"
 )
 
 // Status of a job.

@@ -9,7 +9,7 @@ import (
 	"log/slog"
 	"sync"
 
-	"betemplate/internal/platform/config"
+	"github.com/sK4rdell/signal-engine/internal/platform/config"
 )
 
 // Message is one outbound email. Text is required; HTML is optional and is

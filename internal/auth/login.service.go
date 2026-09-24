@@ -5,8 +5,8 @@ import (
 	"errors"
 	"fmt"
 
-	"betemplate/internal/platform/logging"
-	"betemplate/internal/platform/password"
+	"github.com/sK4rdell/signal-engine/internal/platform/logging"
+	"github.com/sK4rdell/signal-engine/internal/platform/password"
 )
 
 // LoginResult is what a successful login produces.

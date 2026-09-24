@@ -9,10 +9,10 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"betemplate/internal/account"
-	"betemplate/internal/platform/config"
-	"betemplate/internal/platform/database"
-	"betemplate/internal/platform/secretbox"
+	"github.com/sK4rdell/signal-engine/internal/account"
+	"github.com/sK4rdell/signal-engine/internal/platform/config"
+	"github.com/sK4rdell/signal-engine/internal/platform/database"
+	"github.com/sK4rdell/signal-engine/internal/platform/secretbox"
 )
 
 // pgxTx keeps signatures short.

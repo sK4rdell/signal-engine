@@ -7,7 +7,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"betemplate/internal/platform/password"
+	"github.com/sK4rdell/signal-engine/internal/platform/password"
 )
 
 // ForgotPassword issues a reset token and mails it when the email belongs

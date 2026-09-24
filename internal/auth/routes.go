@@ -5,9 +5,9 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"betemplate/internal/platform/api"
-	"betemplate/internal/platform/config"
-	"betemplate/internal/platform/ratelimit"
+	"github.com/sK4rdell/signal-engine/internal/platform/api"
+	"github.com/sK4rdell/signal-engine/internal/platform/config"
+	"github.com/sK4rdell/signal-engine/internal/platform/ratelimit"
 )
 
 // RegisterRoutes mounts the /v1/auth endpoints. Every endpoint that can be

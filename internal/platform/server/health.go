@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"time"
 
-	"betemplate/internal/platform/logging"
+	"github.com/sK4rdell/signal-engine/internal/platform/logging"
 )
 
 // Pinger reports whether a dependency is reachable. *pgxpool.Pool satisfies it.

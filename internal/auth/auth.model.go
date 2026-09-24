@@ -11,7 +11,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"betemplate/internal/platform/apperror"
+	"github.com/sK4rdell/signal-engine/internal/platform/apperror"
 )
 
 // User is a registered identity. PasswordHash never leaves this package.

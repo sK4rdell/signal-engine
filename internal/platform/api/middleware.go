@@ -16,10 +16,10 @@ import (
 	"strings"
 	"time"
 
-	"betemplate/internal/platform/apperror"
-	"betemplate/internal/platform/logging"
-	"betemplate/internal/platform/metrics"
-	"betemplate/internal/platform/ratelimit"
+	"github.com/sK4rdell/signal-engine/internal/platform/apperror"
+	"github.com/sK4rdell/signal-engine/internal/platform/logging"
+	"github.com/sK4rdell/signal-engine/internal/platform/metrics"
+	"github.com/sK4rdell/signal-engine/internal/platform/ratelimit"
 )
 
 // Middleware is a standard net/http middleware.

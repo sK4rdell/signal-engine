@@ -11,11 +11,11 @@ import (
 
 	"github.com/google/uuid"
 
-	"betemplate/internal/auth"
-	"betemplate/internal/platform/api"
-	"betemplate/internal/platform/apperror"
-	"betemplate/internal/platform/config"
-	"betemplate/internal/platform/testutil"
+	"github.com/sK4rdell/signal-engine/internal/auth"
+	"github.com/sK4rdell/signal-engine/internal/platform/api"
+	"github.com/sK4rdell/signal-engine/internal/platform/apperror"
+	"github.com/sK4rdell/signal-engine/internal/platform/config"
+	"github.com/sK4rdell/signal-engine/internal/platform/testutil"
 )
 
 const goodPassword = "correct horse battery staple"

@@ -10,11 +10,11 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"betemplate/internal/platform/config"
-	"betemplate/internal/platform/database"
-	"betemplate/internal/platform/logging"
-	"betemplate/internal/platform/metrics"
-	"betemplate/internal/platform/testutil/pgtest"
+	"github.com/sK4rdell/signal-engine/internal/platform/config"
+	"github.com/sK4rdell/signal-engine/internal/platform/database"
+	"github.com/sK4rdell/signal-engine/internal/platform/logging"
+	"github.com/sK4rdell/signal-engine/internal/platform/metrics"
+	"github.com/sK4rdell/signal-engine/internal/platform/testutil/pgtest"
 )
 
 func testConfig() config.JobsConfig {

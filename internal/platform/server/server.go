@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"time"
 
-	"betemplate/internal/platform/config"
+	"github.com/sK4rdell/signal-engine/internal/platform/config"
 )
 
 // New builds an http.Server with the configured timeouts.

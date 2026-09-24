@@ -6,9 +6,9 @@ import (
 
 	"github.com/google/uuid"
 
-	"betemplate/internal/account"
-	"betemplate/internal/platform/apperror"
-	"betemplate/internal/platform/testutil"
+	"github.com/sK4rdell/signal-engine/internal/account"
+	"github.com/sK4rdell/signal-engine/internal/platform/apperror"
+	"github.com/sK4rdell/signal-engine/internal/platform/testutil"
 )
 
 func TestAccounts_ListAndGetAreScopedToMembership(t *testing.T) {

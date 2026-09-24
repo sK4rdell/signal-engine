@@ -5,8 +5,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"betemplate/internal/platform/apperror"
-	"betemplate/internal/platform/jobs"
+	"github.com/sK4rdell/signal-engine/internal/platform/apperror"
+	"github.com/sK4rdell/signal-engine/internal/platform/jobs"
 )
 
 // VerifyEmail consumes a verification token and marks the user verified.

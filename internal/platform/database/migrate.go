@@ -11,7 +11,7 @@ import (
 	gooseDB "github.com/pressly/goose/v3/database"
 	"github.com/pressly/goose/v3/lock"
 
-	"betemplate/migrations"
+	"github.com/sK4rdell/signal-engine/migrations"
 )
 
 // MigrationStatus describes one known migration.

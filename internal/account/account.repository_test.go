@@ -7,9 +7,9 @@ import (
 
 	"github.com/google/uuid"
 
-	"betemplate/internal/account"
-	"betemplate/internal/auth"
-	"betemplate/internal/platform/testutil/pgtest"
+	"github.com/sK4rdell/signal-engine/internal/account"
+	"github.com/sK4rdell/signal-engine/internal/auth"
+	"github.com/sK4rdell/signal-engine/internal/platform/testutil/pgtest"
 )
 
 func TestRepository_AccountsAndMemberships(t *testing.T) {

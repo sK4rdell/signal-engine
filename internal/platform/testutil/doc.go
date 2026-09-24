@@ -9,7 +9,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"betemplate/internal/platform/testutil/pgtest"
+	"github.com/sK4rdell/signal-engine/internal/platform/testutil/pgtest"
 )
 
 // NewPool returns a pool on a fresh migrated database. See pgtest.NewPool.

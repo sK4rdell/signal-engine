@@ -12,7 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"betemplate/internal/platform/config"
+	"github.com/sK4rdell/signal-engine/internal/platform/config"
 )
 
 // DBTX is the minimal query interface implemented by both *pgxpool.Pool and

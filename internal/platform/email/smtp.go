@@ -15,7 +15,7 @@ import (
 	"strings"
 	"time"
 
-	"betemplate/internal/platform/config"
+	"github.com/sK4rdell/signal-engine/internal/platform/config"
 )
 
 // SMTPSender delivers over SMTP with opportunistic STARTTLS and optional
@@ -115,7 +115,7 @@ func Encode(from string, msg Message) string {
 		return b.String()
 	}
 
-	boundary := "=_betemplate_" + randomID()
+	boundary := "=_signal-engine_" + randomID()
 	b.WriteString("Content-Type: multipart/alternative; boundary=\"" + boundary + "\"\r\n\r\n")
 	b.WriteString("--" + boundary + "\r\n")
 	b.WriteString("Content-Type: text/plain; charset=UTF-8\r\n")

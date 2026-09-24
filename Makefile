@@ -107,7 +107,7 @@ rename: ## Rename the project: make rename module=github.com/acme/widgets [name=
 
 .PHONY: docker-build
 docker-build: ## Build the production image
-	docker build -t betemplate:local .
+	docker build -t signal-engine:local .
 
 .PHONY: clean
 clean: ## Remove build output

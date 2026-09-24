@@ -11,8 +11,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"betemplate/internal/platform/apperror"
-	"betemplate/internal/platform/database"
+	"github.com/sK4rdell/signal-engine/internal/platform/apperror"
+	"github.com/sK4rdell/signal-engine/internal/platform/database"
 )
 
 // Repository persists examples. Every query is scoped by account_id so a

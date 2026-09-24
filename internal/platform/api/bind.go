@@ -11,7 +11,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 
-	"betemplate/internal/platform/apperror"
+	"github.com/sK4rdell/signal-engine/internal/platform/apperror"
 )
 
 var (

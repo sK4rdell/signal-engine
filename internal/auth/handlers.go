@@ -7,7 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"betemplate/internal/platform/api"
+	"github.com/sK4rdell/signal-engine/internal/platform/api"
 )
 
 // UserResponse is the public shape of a user.

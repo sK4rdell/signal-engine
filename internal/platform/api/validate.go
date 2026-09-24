@@ -9,7 +9,7 @@ import (
 
 	"github.com/go-playground/validator/v10"
 
-	"betemplate/internal/platform/apperror"
+	"github.com/sK4rdell/signal-engine/internal/platform/apperror"
 )
 
 var (

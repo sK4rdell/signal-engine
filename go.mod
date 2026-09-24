@@ -1,4 +1,4 @@
-module betemplate
+module github.com/sK4rdell/signal-engine
 
 go 1.26.0
 

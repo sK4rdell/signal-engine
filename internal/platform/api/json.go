@@ -10,7 +10,7 @@ import (
 	"net/http"
 	"strings"
 
-	"betemplate/internal/platform/apperror"
+	"github.com/sK4rdell/signal-engine/internal/platform/apperror"
 )
 
 // CodeUnsupportedMediaType is returned when a body is not application/json.

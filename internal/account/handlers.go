@@ -9,7 +9,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"betemplate/internal/platform/api"
+	"github.com/sK4rdell/signal-engine/internal/platform/api"
 )
 
 // AccountResponse is the public shape of an account as seen by a member.

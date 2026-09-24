@@ -6,9 +6,9 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"betemplate/internal/platform/apperror"
-	"betemplate/internal/platform/config"
-	"betemplate/internal/platform/metrics"
+	"github.com/sK4rdell/signal-engine/internal/platform/apperror"
+	"github.com/sK4rdell/signal-engine/internal/platform/config"
+	"github.com/sK4rdell/signal-engine/internal/platform/metrics"
 )
 
 // RouterConfig configures the shared middleware stack.

@@ -11,7 +11,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"betemplate/internal/platform/api"
+	"github.com/sK4rdell/signal-engine/internal/platform/api"
 )
 
 // Client sends requests through the router and keeps cookies between

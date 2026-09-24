@@ -8,12 +8,12 @@ import (
 	"os/signal"
 	"syscall"
 
-	"betemplate/internal/app"
-	"betemplate/internal/platform/config"
-	"betemplate/internal/platform/database"
-	"betemplate/internal/platform/email"
-	"betemplate/internal/platform/logging"
-	"betemplate/internal/platform/metrics"
+	"github.com/sK4rdell/signal-engine/internal/app"
+	"github.com/sK4rdell/signal-engine/internal/platform/config"
+	"github.com/sK4rdell/signal-engine/internal/platform/database"
+	"github.com/sK4rdell/signal-engine/internal/platform/email"
+	"github.com/sK4rdell/signal-engine/internal/platform/logging"
+	"github.com/sK4rdell/signal-engine/internal/platform/metrics"
 )
 
 func main() {

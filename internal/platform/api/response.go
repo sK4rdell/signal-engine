@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"net/http"
 
-	"betemplate/internal/platform/apperror"
-	"betemplate/internal/platform/logging"
+	"github.com/sK4rdell/signal-engine/internal/platform/apperror"
+	"github.com/sK4rdell/signal-engine/internal/platform/logging"
 )
 
 // ErrorResponse is the public error envelope.

@@ -87,6 +87,6 @@ jobs:
         with:
           context: .
           push: false
-          tags: betemplate:ci
+          tags: signal-engine:ci
           cache-from: type=gha
           cache-to: type=gha,mode=max

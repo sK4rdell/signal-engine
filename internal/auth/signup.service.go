@@ -6,8 +6,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"betemplate/internal/account"
-	"betemplate/internal/platform/password"
+	"github.com/sK4rdell/signal-engine/internal/account"
+	"github.com/sK4rdell/signal-engine/internal/platform/password"
 )
 
 // SignupResult is what a successful signup produces.

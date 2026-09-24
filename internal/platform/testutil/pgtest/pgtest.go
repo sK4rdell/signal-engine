@@ -21,10 +21,10 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"betemplate/internal/platform/config"
-	"betemplate/internal/platform/database"
-	"betemplate/internal/platform/logging"
-	"betemplate/migrations"
+	"github.com/sK4rdell/signal-engine/internal/platform/config"
+	"github.com/sK4rdell/signal-engine/internal/platform/database"
+	"github.com/sK4rdell/signal-engine/internal/platform/logging"
+	"github.com/sK4rdell/signal-engine/migrations"
 )
 
 // Every test process cooperates through this advisory lock when creating

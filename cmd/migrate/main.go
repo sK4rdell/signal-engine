@@ -13,9 +13,9 @@ import (
 	"os/signal"
 	"syscall"
 
-	"betemplate/internal/platform/config"
-	"betemplate/internal/platform/database"
-	"betemplate/internal/platform/logging"
+	"github.com/sK4rdell/signal-engine/internal/platform/config"
+	"github.com/sK4rdell/signal-engine/internal/platform/database"
+	"github.com/sK4rdell/signal-engine/internal/platform/logging"
 )
 
 func main() {

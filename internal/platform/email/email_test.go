@@ -14,8 +14,8 @@ import (
 	"testing"
 	"time"
 
-	"betemplate/internal/platform/config"
-	"betemplate/internal/platform/logging"
+	"github.com/sK4rdell/signal-engine/internal/platform/config"
+	"github.com/sK4rdell/signal-engine/internal/platform/logging"
 )
 
 func TestRender_AllTemplates(t *testing.T) {

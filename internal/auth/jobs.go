@@ -6,10 +6,10 @@ import (
 
 	"github.com/google/uuid"
 
-	"betemplate/internal/platform/config"
-	"betemplate/internal/platform/email"
-	"betemplate/internal/platform/jobs"
-	"betemplate/internal/platform/secretbox"
+	"github.com/sK4rdell/signal-engine/internal/platform/config"
+	"github.com/sK4rdell/signal-engine/internal/platform/email"
+	"github.com/sK4rdell/signal-engine/internal/platform/jobs"
+	"github.com/sK4rdell/signal-engine/internal/platform/secretbox"
 )
 
 // uuidType keeps the service signatures readable without importing uuid in

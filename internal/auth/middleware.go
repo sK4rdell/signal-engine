@@ -4,8 +4,8 @@ import (
 	"errors"
 	"net/http"
 
-	"betemplate/internal/platform/api"
-	"betemplate/internal/platform/logging"
+	"github.com/sK4rdell/signal-engine/internal/platform/api"
+	"github.com/sK4rdell/signal-engine/internal/platform/logging"
 )
 
 // RequireSession authenticates requests from the session cookie. Requests

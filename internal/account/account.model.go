@@ -7,7 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"betemplate/internal/platform/apperror"
+	"github.com/sK4rdell/signal-engine/internal/platform/apperror"
 )
 
 // Role is a membership role. The set is intentionally small.

@@ -8,8 +8,8 @@ import (
 
 	"github.com/jackc/pgx/v5"
 
-	"betemplate/internal/platform/database"
-	"betemplate/internal/platform/testutil/pgtest"
+	"github.com/sK4rdell/signal-engine/internal/platform/database"
+	"github.com/sK4rdell/signal-engine/internal/platform/testutil/pgtest"
 )
 
 func setup(t *testing.T) (context.Context, *pgxPool) {

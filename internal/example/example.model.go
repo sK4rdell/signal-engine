@@ -12,7 +12,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"betemplate/internal/platform/apperror"
+	"github.com/sK4rdell/signal-engine/internal/platform/apperror"
 )
 
 // Example is the persisted resource.

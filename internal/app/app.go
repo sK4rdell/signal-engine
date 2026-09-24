@@ -11,16 +11,16 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"betemplate/internal/account"
-	"betemplate/internal/auth"
-	"betemplate/internal/example"
-	"betemplate/internal/platform/api"
-	"betemplate/internal/platform/config"
-	"betemplate/internal/platform/email"
-	"betemplate/internal/platform/jobs"
-	"betemplate/internal/platform/metrics"
-	"betemplate/internal/platform/secretbox"
-	"betemplate/internal/platform/server"
+	"github.com/sK4rdell/signal-engine/internal/account"
+	"github.com/sK4rdell/signal-engine/internal/auth"
+	"github.com/sK4rdell/signal-engine/internal/example"
+	"github.com/sK4rdell/signal-engine/internal/platform/api"
+	"github.com/sK4rdell/signal-engine/internal/platform/config"
+	"github.com/sK4rdell/signal-engine/internal/platform/email"
+	"github.com/sK4rdell/signal-engine/internal/platform/jobs"
+	"github.com/sK4rdell/signal-engine/internal/platform/metrics"
+	"github.com/sK4rdell/signal-engine/internal/platform/secretbox"
+	"github.com/sK4rdell/signal-engine/internal/platform/server"
 )
 
 // Deps are the infrastructure values the application is built from.

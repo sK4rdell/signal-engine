@@ -12,17 +12,17 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"betemplate/internal/account"
-	"betemplate/internal/app"
-	"betemplate/internal/auth"
-	"betemplate/internal/platform/config"
-	"betemplate/internal/platform/database"
-	"betemplate/internal/platform/email"
-	"betemplate/internal/platform/jobs"
-	"betemplate/internal/platform/logging"
-	"betemplate/internal/platform/metrics"
-	"betemplate/internal/platform/password"
-	"betemplate/internal/platform/testutil/pgtest"
+	"github.com/sK4rdell/signal-engine/internal/account"
+	"github.com/sK4rdell/signal-engine/internal/app"
+	"github.com/sK4rdell/signal-engine/internal/auth"
+	"github.com/sK4rdell/signal-engine/internal/platform/config"
+	"github.com/sK4rdell/signal-engine/internal/platform/database"
+	"github.com/sK4rdell/signal-engine/internal/platform/email"
+	"github.com/sK4rdell/signal-engine/internal/platform/jobs"
+	"github.com/sK4rdell/signal-engine/internal/platform/logging"
+	"github.com/sK4rdell/signal-engine/internal/platform/metrics"
+	"github.com/sK4rdell/signal-engine/internal/platform/password"
+	"github.com/sK4rdell/signal-engine/internal/platform/testutil/pgtest"
 )
 
 // AllowedOrigin is the browser origin the test configuration trusts.

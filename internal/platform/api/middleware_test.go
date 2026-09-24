@@ -13,12 +13,12 @@ import (
 	"testing"
 	"time"
 
-	"betemplate/internal/platform/api"
-	"betemplate/internal/platform/apperror"
-	"betemplate/internal/platform/config"
-	"betemplate/internal/platform/logging"
-	"betemplate/internal/platform/metrics"
-	"betemplate/internal/platform/ratelimit"
+	"github.com/sK4rdell/signal-engine/internal/platform/api"
+	"github.com/sK4rdell/signal-engine/internal/platform/apperror"
+	"github.com/sK4rdell/signal-engine/internal/platform/config"
+	"github.com/sK4rdell/signal-engine/internal/platform/logging"
+	"github.com/sK4rdell/signal-engine/internal/platform/metrics"
+	"github.com/sK4rdell/signal-engine/internal/platform/ratelimit"
 )
 
 func testRouterConfig(logBuf *bytes.Buffer) api.RouterConfig {
