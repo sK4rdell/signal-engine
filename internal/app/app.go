@@ -21,6 +21,8 @@ import (
 	"github.com/sK4rdell/signal-engine/internal/platform/metrics"
 	"github.com/sK4rdell/signal-engine/internal/platform/secretbox"
 	"github.com/sK4rdell/signal-engine/internal/platform/server"
+	"github.com/sK4rdell/signal-engine/internal/publicevent"
+	"github.com/sK4rdell/signal-engine/internal/source/arbetsmiljoverket"
 )
 
 // Deps are the infrastructure values the application is built from.
@@ -39,6 +41,9 @@ type App struct {
 
 	Auth     *auth.Service
 	Accounts *account.Repository
+
+	// Arbetsmiljoverket ingests inspection notices; run by cmd/ingest.
+	Arbetsmiljoverket *arbetsmiljoverket.Ingester
 }
 
 // New wires the application. The router serves the API; the worker has every
@@ -84,10 +89,19 @@ func New(deps Deps) (*App, error) {
 	// its migration when starting a real product.
 	example.RegisterRoutes(router, example.NewRepository(), deps.Pool, authenticated, member)
 
+	// Public events and the sources that produce them.
+	publicEventRepo := publicevent.NewRepository()
+	publicevent.RegisterRoutes(router, publicEventRepo, deps.Pool, authenticated)
+	avClient, err := arbetsmiljoverket.NewClient(deps.Config.Sources.Arbetsmiljoverket, nil)
+	if err != nil {
+		return nil, err
+	}
+
 	return &App{
-		Router:   router,
-		Worker:   worker,
-		Auth:     authService,
-		Accounts: accountRepo,
+		Router:            router,
+		Worker:            worker,
+		Auth:              authService,
+		Accounts:          accountRepo,
+		Arbetsmiljoverket: arbetsmiljoverket.NewIngester(avClient, publicEventRepo, deps.Pool, deps.Logger),
 	}, nil
 }

@@ -23,6 +23,7 @@ import (
 	"github.com/sK4rdell/signal-engine/internal/platform/metrics"
 	"github.com/sK4rdell/signal-engine/internal/platform/password"
 	"github.com/sK4rdell/signal-engine/internal/platform/testutil/pgtest"
+	"github.com/sK4rdell/signal-engine/internal/source/arbetsmiljoverket"
 )
 
 // AllowedOrigin is the browser origin the test configuration trusts.
@@ -43,6 +44,9 @@ type App struct {
 	Worker  *jobs.Worker
 	Auth    *auth.Service
 	Metrics *metrics.Metrics
+	// Arbetsmiljoverket is the ingester wired by app.New. Point it at a
+	// local server with WithConfig (Sources.Arbetsmiljoverket.BaseURL).
+	Arbetsmiljoverket *arbetsmiljoverket.Ingester
 
 	logs *lockedBuffer
 }
@@ -93,7 +97,9 @@ func NewApp(t testing.TB, opts ...Option) *App {
 		Worker:  application.Worker,
 		Auth:    application.Auth,
 		Metrics: m,
-		logs:    logs,
+
+		Arbetsmiljoverket: application.Arbetsmiljoverket,
+		logs:              logs,
 	}
 }
 
@@ -111,6 +117,8 @@ var testEnv = map[string]string{
 	"AUTH_RATE_LIMIT_REQUESTS": "10000",
 	"JOBS_POLL_INTERVAL":       "10ms",
 	"JOBS_CONCURRENCY":         "2",
+	// No politeness delay against local test servers.
+	"ARBETSMILJOVERKET_REQUEST_INTERVAL": "0",
 }
 
 // Logs returns everything the application logged so far.

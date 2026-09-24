@@ -60,7 +60,8 @@ curl -s -H 'Content-Type: application/json' -X POST localhost:8080/v1/auth/reset
 make help              list every target
 make dev               run the API locally (sources .env)
 make worker            run the background worker locally
-make build             build bin/api, bin/worker, bin/migrate
+make build             build bin/api, bin/worker, bin/migrate, bin/ingest
+make ingest            ingest Arbetsmiljöverket inspection notices (from=, to=)
 make test              run all tests against the compose PostgreSQL and Mailpit
 make test-race         same, with the race detector
 make lint              gofmt check, go vet, golangci-lint (when installed)
@@ -88,6 +89,19 @@ make migrate-down                  # roll back the latest one
 make migration-status
 make migration name=create_widgets # scaffold migrations/<timestamp>_create_widgets.sql
 ```
+
+## 4b. Ingesting public events
+
+Signal Engine turns public records into public events. The first source is
+Arbetsmiljöverket's web diary (`docs/sources/arbetsmiljoverket.md`):
+
+```bash
+make ingest from=2026-09-20 to=2026-09-23   # inclusive dates; defaults to yesterday
+curl -s -b cookies 'localhost:8080/v1/public-events?from=2026-09-20&limit=100'
+```
+
+Re-running a window is idempotent. See `docs/public-events.md` for the
+observation/event semantics and the API.
 
 Never edit an applied migration; add a new one. CI applies every migration
 to an empty database on each run, and `TestMigrator_UpDownUpFromEmptyDatabase`
@@ -142,11 +156,15 @@ cmd/
   api/            HTTP server (optionally with embedded worker)
   worker/         background job worker
   migrate/        goose migrations: up | down | status | version
+  ingest/         manual source ingestion: ingest arbetsmiljoverket --from --to
 internal/
   app/            composition root: wires config, infrastructure, features, routes, jobs
   auth/           users, sessions, signup/login/logout, email verification, password reset
   account/        accounts (workspaces) and memberships, membership middleware
   example/        example feature proving the conventions; delete it when starting a product
+  publicevent/    source observations, canonical public events, GET /v1/public-events
+  source/
+    arbetsmiljoverket/  web diary client, parser and ingester (source-specific code only)
   platform/
     api/          typed handler wrapper, binding, strict JSON, validation, errors, middleware, router
     apperror/     application error type and stable public codes
@@ -161,7 +179,7 @@ internal/
     server/       http.Server construction, graceful shutdown, /healthz, /readyz
     testutil/     integration-test harness (App, factories, client); pgtest/ for bare databases
 migrations/       goose SQL migrations (embedded)
-docs/             architecture, API, database and testing conventions
+docs/             architecture, API, database, testing and public-event conventions; docs/sources/ has source research
 old/              previous implementation, reference only (see old/README.md)
 ```
 
@@ -183,6 +201,9 @@ GET    /v1/accounts/{accountID}/examples?limit=&cursor=
 GET    /v1/accounts/{accountID}/examples/{exampleID}
 PATCH  /v1/accounts/{accountID}/examples/{exampleID}
 DELETE /v1/accounts/{accountID}/examples/{exampleID}
+
+GET    /v1/public-events?source=&event_type=&from=&to=&organisation_number=&limit=&cursor=
+GET    /v1/public-events/{eventID}
 ```
 
 ### Renaming the project
