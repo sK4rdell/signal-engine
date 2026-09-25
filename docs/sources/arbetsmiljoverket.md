@@ -272,9 +272,13 @@ Calendar-year counts for `6.4-1`: 1 641 (2024), 1 761 (2025). For `6.1-49`:
   inte erbjuder betryggande säkerhet, ska de snarast meddela detta till
   Arbetsmiljöverket." Bilaga (arbetskorgar) 3.3 and 10 kap. 41 § (boilers
   that may not be operated) carry the same duty. An incoming `Intyg
-  återkommande besiktning` is therefore a device that **failed** its
-  recurring inspection. A handful of rows are titled "För kännedom -
-  godkänd besiktning" and are the exception.
+  återkommande besiktning` whose case title reads "Återkommande
+  besiktning - <device>" is therefore a device that **failed** its
+  recurring inspection: 1,695 of the 1,738 cases in the twelve-month
+  population. The other 43 cases carry other titles (inspection campaign
+  names, asbestos and crusher notifications, two "För kännedom - godkänd
+  besiktning" rows) and must be filtered out by title before the failure
+  reading applies.
 * Observed case pattern (sampled case pages): Intyg (day 0) →
   Tillsynsmeddelande to the employer (0–22 days) → Påminnelse → Svar på
   kravskrivelse → Beslut om att ärende avslutas, sometimes with a second
