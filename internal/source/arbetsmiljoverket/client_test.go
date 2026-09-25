@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"strings"
 	"testing"
@@ -159,5 +160,25 @@ func TestNewClient_RejectsBadBaseURL(t *testing.T) {
 		if _, err := NewClient(config.ArbetsmiljoverketConfig{BaseURL: bad}, nil); err == nil {
 			t.Errorf("NewClient(%q) accepted", bad)
 		}
+	}
+}
+
+func TestClient_SearchTextIsOptional(t *testing.T) {
+	c := newTestClient(t, "https://www.av.se", 0)
+	q := SearchQuery{From: date(t, "2015-01-01"), To: date(t, "2026-09-24"), SubjectArea: SubjectAreaInspection, DocumentType: DocumentTypeRecurringInspectionCertificate}
+	u, err := url.Parse(c.SearchURL(q))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, present := u.Query()["SearchText"]; present {
+		t.Errorf("SearchText must be absent when Text is empty: %s", u)
+	}
+	q.Text = "2026/044084"
+	u, _ = url.Parse(c.SearchURL(q))
+	if got := u.Query().Get("SearchText"); got != "2026/044084" {
+		t.Errorf("SearchText = %q", got)
+	}
+	if u.Query().Get("SelectedHandlingType") != "6.1-49" || u.Query().Get("FromDate") != "2015-01-01" {
+		t.Errorf("filters lost: %s", u)
 	}
 }

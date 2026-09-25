@@ -24,7 +24,7 @@ rule and the canonical event type.
 | Feed (`--feed`) | Filter | Rows accepted | Event type |
 | --- | --- | --- | --- |
 | `inspection-notices` (default) | `6.1` / `6.1-23` Inspektionsmeddelande | every row of that type | `WORK_ENVIRONMENT_INSPECTION_NOTICE` |
-| `recurring-inspection-failures` | `6.1` / `6.1-49` Intyg återkommande besiktning | origin `Inkommande` **and** case title starting with "Återkommande besiktning" (case-insensitive) | `WORK_EQUIPMENT_INSPECTION_FAILED` |
+| `recurring-inspection-failures` | `6.1` / `6.1-49` Intyg återkommande besiktning | origin `Inkommande` **and** case title starting with "Återkommande besiktning" (case-insensitive) **and** the row is the earliest 6.1-49 document of its case | `WORK_EQUIPMENT_INSPECTION_FAILED` |
 
 ```bash
 make ingest from=2026-09-20 to=2026-09-23                                        # inspection notices (unchanged)
@@ -50,7 +50,48 @@ besiktning - Fordonslyft flerpelarlyft"); the device family (lifting,
 pressure) is not part of the canonical event and is left to a later
 recipe or assessment layer, per `docs/public-events.md`.
 
-Two limitations to keep in mind when reading these events:
+### One event per case: only the earliest certificate is a failure
+
+A recurring-inspection case can receive more than one 6.1-49 document:
+the certificate that opened the case and, weeks later, the certificate
+from the re-inspection that closes it. Both carry origin `Inkommande` and
+the same case title, so the title rule alone cannot tell them apart.
+Verified on 2026-09-25 over the 60 cases with two or more certificates
+in the twelve-month population (55 with two, 5 with three; case pages
+read, no document ordered):
+
+* the first certificate (by date) is incoming and has the lowest
+  document-number suffix in 60 of 60 cases (and in all 454 certificate
+  cases whose pages were read);
+* in 47 of 60 cases it is followed by Arbetsmiljöverket's
+  Tillsynsmeddelande, the demand that defines the failure;
+* the later certificate was followed by case closure within 14 days in
+  36 cases (25 of them the same day), by closure later in 15, and the
+  case was still open in 1; in **no** case was a later certificate
+  followed by a new Tillsynsmeddelande;
+* 13 cases had two certificates on the same day as the first (several
+  devices in one batch, "Kokgryta, två stycken"), i.e. part of the same
+  failure, not a re-inspection.
+
+The rule the feed applies: a qualifying row becomes an event **only if
+it is the earliest 6.1-49 document of its case**, ordered by document
+date and then by document-number suffix. The ingester checks this
+against the source with a case-scoped search (`SearchText=<case
+number>` with the same type filter and a window from the diary's start
+to the row's date), which lists exactly the case's documents of that
+type; the case number is the parsed case link of the row. Because the
+answer comes from source chronology, a later certificate is skipped
+whether or not the earlier one was ingested first, overlapping windows
+stay idempotent, and two cases for the same organisation or workplace
+stay independent. Skipped later certificates are counted as
+`records_later_in_case` and logged with both document numbers.
+
+Consequences: an event states that the device named in the case failed
+its recurring inspection when the case was opened. The re-inspection
+outcome is not represented (there is no passed event), and a same-day
+batch of several failed devices in one case yields one event.
+
+Limitations to keep in mind when reading these events:
 
 * `occurred_on` is the date the certificate was registered at
   Arbetsmiljöverket, not the inspection date; the lag between them is
@@ -58,13 +99,13 @@ Two limitations to keep in mind when reading these events:
 * The failed inspection is deterministic; whether the employer has
   already chosen a repair supplier when the event appears is not known
   from the source (see the evaluation, section 5).
-* A recurring-inspection case can receive a second certificate weeks
-  later (7 % of cases in the evaluation), normally the re-inspection
-  result that closes the case. The acceptance rule cannot tell it from
-  the first certificate without the document, so it becomes a second
-  event of the same type; the document number suffix (`-5` rather than
-  `-1`) and the case status in the payload are the hints. Observed in
-  the smoke run: `2026/044084-5`.
+* Later certificates in a case (about 4 % of cases) are not events; what
+  they say about the re-inspection is not known from metadata. Example:
+  case `2026/044084` opened with certificate `-1` on 2026-06-29 (event)
+  and received certificate `-5` on 2026-09-24, closed the same day (no
+  event).
+* The case-scoped check costs one extra search request per accepted
+  certificate row.
 
 ## Public entry point
 

@@ -27,6 +27,12 @@ type Feed struct {
 	// accept decides whether a row of the right document type is an event
 	// of this feed. The reason is logged when a row is skipped.
 	accept func(Document) (ok bool, reason string)
+	// OnePerCase restricts the feed to the earliest document of its type in
+	// each source case (by document date, then document-number suffix).
+	// Later documents of the same type in the same case are skipped. The
+	// check is made against the source, not against what was ingested
+	// before, so ingestion order and overlapping windows do not matter.
+	OnePerCase bool
 }
 
 // Accept reports whether doc is an event of the feed and, when not, why.
@@ -76,10 +82,14 @@ var FeedInspectionNotices = Feed{
 // FeedRecurringInspectionFailures is the second feed: incoming certificates
 // from accredited inspection bodies. AFS 2023:11 13 kap. 13 § obliges the
 // body to notify Arbetsmiljöverket when a device "inte erbjuder betryggande
-// säkerhet", so an incoming certificate in a case titled "Återkommande
-// besiktning - <device>" is a device that failed its recurring inspection.
-// Rows with other titles ("För kännedom - godkänd besiktning", inspection
-// campaigns) or another origin are not failures and are skipped.
+// säkerhet", so the incoming certificate that opens a case titled
+// "Återkommande besiktning - <device>" is a device that failed its
+// recurring inspection. Rows with other titles ("För kännedom - godkänd
+// besiktning", inspection campaigns) or another origin are not failures
+// and are skipped. A later certificate in the same case is the
+// re-inspection result and is not a failure statement, so only the
+// earliest certificate of a case becomes an event (OnePerCase); see
+// docs/sources/arbetsmiljoverket.md for the empirical basis.
 var FeedRecurringInspectionFailures = Feed{
 	Name:             "recurring-inspection-failures",
 	SubjectArea:      SubjectAreaInspection,
@@ -87,6 +97,7 @@ var FeedRecurringInspectionFailures = Feed{
 	DocumentTypeName: RecurringInspectionCertificateTypeName,
 	EventType:        publicevent.EventTypeWorkEquipmentInspectionFailed,
 	accept:           acceptRecurringInspectionFailure,
+	OnePerCase:       true,
 }
 
 // DefaultFeed is what ingestion runs when no feed is named.

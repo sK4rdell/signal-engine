@@ -201,3 +201,40 @@ func TestToEvent(t *testing.T) {
 		t.Errorf("event = %+v", ev)
 	}
 }
+
+func TestParseSearchPage_CertificateRowsExposeCase(t *testing.T) {
+	page, err := ParseSearchPage(openFixture(t, "search_page_case_044084.html"), base)
+	if err != nil || len(page.RowErrors) != 0 || len(page.Documents) != 2 || page.Total != 2 {
+		t.Fatalf("page = %+v, %v", page, err)
+	}
+	for _, d := range page.Documents {
+		if d.CaseNumber != "2026/044084" || d.DocumentType != "Intyg återkommande besiktning" || d.Origin != "Inkommande" ||
+			d.CaseTitle != "Återkommande besiktning - Lyftbord vid lastkaj" || d.OrganisationNumber != "5593182370" || d.WorkplaceCFAR != "67577551" {
+			t.Errorf("document = %+v", d)
+		}
+	}
+	if page.Documents[0].DocumentNumber != "2026/044084-5" || page.Documents[0].DocumentDate != "2026-09-24" ||
+		page.Documents[1].DocumentNumber != "2026/044084-1" || page.Documents[1].DocumentDate != "2026-06-29" {
+		t.Errorf("documents = %+v", page.Documents)
+	}
+}
+
+func TestDocumentOrderWithinCase(t *testing.T) {
+	for number, want := range map[string]int{"2026/044084-5": 5, "2026/044084-1": 1, "2026/044084-12": 12, "2026/044084": 0, "": 0, "2026/044084-x": 0} {
+		if got := documentSuffix(number); got != want {
+			t.Errorf("documentSuffix(%q) = %d, want %d", number, got, want)
+		}
+	}
+	a := Document{DocumentNumber: "2026/044084-1", DocumentDate: "2026-06-29"}
+	b := Document{DocumentNumber: "2026/044084-5", DocumentDate: "2026-09-24"}
+	sameDay := Document{DocumentNumber: "2026/044084-2", DocumentDate: "2026-06-29"}
+	if !documentBefore(a, b) || documentBefore(b, a) {
+		t.Error("earlier date must come first")
+	}
+	if !documentBefore(a, sameDay) || documentBefore(sameDay, a) {
+		t.Error("same date: lower suffix must come first")
+	}
+	if documentBefore(a, a) {
+		t.Error("a document is not before itself")
+	}
+}

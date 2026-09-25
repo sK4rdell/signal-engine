@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -62,6 +63,10 @@ type Stats struct {
 	// RecordsSkipped are rows of the right document type that the feed's
 	// acceptance rule rejected; they are logged and produce nothing.
 	RecordsSkipped int
+	// RecordsLaterInCase are accepted rows that are not the earliest
+	// document of their type in their source case (feeds with OnePerCase);
+	// they are logged and produce nothing.
+	RecordsLaterInCase int
 	// OtherDocumentTypes are rows the source returned despite the filter.
 	OtherDocumentTypes         int
 	ParseFailures              int
@@ -81,6 +86,7 @@ func (s Stats) LogAttrs() []any {
 		"records_observed", s.RecordsObserved,
 		"records_accepted", s.RecordsAccepted,
 		"records_skipped", s.RecordsSkipped,
+		"records_later_in_case", s.RecordsLaterInCase,
 		"other_document_types", s.OtherDocumentTypes,
 		"parse_failures", s.ParseFailures,
 		"persist_failures", s.PersistFailures,
@@ -106,8 +112,9 @@ func (in *Ingester) Run(ctx context.Context, w Window) (Stats, error) {
 // the filtered search until the source reports no more rows. A transport,
 // status or page-level parse error aborts the run with the stats so far; a
 // malformed row or a failed persist is counted, logged and skipped, and so
-// is a row the feed's acceptance rule rejects. Re-running over the same or
-// an overlapping window is idempotent.
+// is a row the feed's acceptance rule rejects or, for a OnePerCase feed, a
+// row that is not the earliest of its type in its case. Re-running over the
+// same or an overlapping window is idempotent.
 func (in *Ingester) RunFeed(ctx context.Context, feed Feed, w Window) (Stats, error) {
 	var stats Stats
 	if err := feed.validate(); err != nil {
@@ -156,6 +163,19 @@ func (in *Ingester) RunFeed(ctx context.Context, feed Feed, w Window) (Stats, er
 					"case_title", doc.CaseTitle, "organisation_number", doc.OrganisationNumber, "reason", reason)
 				continue
 			}
+			if feed.OnePerCase {
+				earliest, err := in.earliestInCase(ctx, feed, doc)
+				if err != nil {
+					return stats, fmt.Errorf("page %d, document %s: %w", page, doc.DocumentNumber, err)
+				}
+				if earliest.DocumentNumber != doc.DocumentNumber {
+					stats.RecordsLaterInCase++
+					logger.Info("source row is not the earliest document of its type in its case; skipped",
+						"document_number", doc.DocumentNumber, "document_date", doc.DocumentDate, "case_number", doc.CaseNumber,
+						"earliest_document_number", earliest.DocumentNumber, "earliest_document_date", earliest.DocumentDate, "case_title", doc.CaseTitle)
+					continue
+				}
+			}
 			stats.RecordsAccepted++
 			if err := in.persist(ctx, feed, doc, sp.URL, &stats); err != nil {
 				stats.PersistFailures++
@@ -172,6 +192,78 @@ func (in *Ingester) RunFeed(ctx context.Context, feed Feed, w Window) (Stats, er
 		return stats, fmt.Errorf("%w: %d of %d", ErrPersistFailures, stats.PersistFailures, stats.RecordsAccepted)
 	}
 	return stats, nil
+}
+
+// maxCasePages bounds the case-scoped search: a case holds a handful of
+// documents of one type, never more than a few pages.
+const maxCasePages = 10
+
+// sourceEpoch is the first date the diary covers; the case-scoped search
+// must see every earlier document of the case, whatever the run's window.
+var sourceEpoch = time.Date(2015, 1, 1, 0, 0, 0, 0, time.UTC)
+
+// earliestInCase asks the source for every document of the feed's type in
+// doc's case up to doc's date and returns the earliest one by document
+// date, then document-number suffix. It always includes doc itself, so the
+// result is doc when nothing earlier exists. The answer comes from source
+// chronology, not from what was ingested before, which keeps overlapping
+// and out-of-order windows correct.
+func (in *Ingester) earliestInCase(ctx context.Context, feed Feed, doc Document) (Document, error) {
+	docDate, _ := time.Parse(dateLayout, doc.DocumentDate) // validated by the parser
+	earliest := doc
+	seen := 0
+	for page := 1; page <= maxCasePages; page++ {
+		sp, err := in.client.Search(ctx, SearchQuery{
+			From:         sourceEpoch,
+			To:           docDate,
+			SubjectArea:  feed.SubjectArea,
+			DocumentType: feed.DocumentType,
+			Text:         doc.CaseNumber,
+			Page:         page,
+		})
+		if err != nil {
+			return Document{}, fmt.Errorf("case %s: %w", doc.CaseNumber, err)
+		}
+		if len(sp.Documents) == 0 && len(sp.RowErrors) == 0 {
+			break
+		}
+		for _, other := range sp.Documents {
+			// The text filter is a substring match; keep the case's own rows
+			// of the feed's document type.
+			if other.CaseNumber != doc.CaseNumber || other.DocumentType != feed.DocumentTypeName {
+				continue
+			}
+			if documentBefore(other, earliest) {
+				earliest = other
+			}
+		}
+		seen += len(sp.Documents) + len(sp.RowErrors)
+		if sp.Total > 0 && seen >= sp.Total {
+			break
+		}
+	}
+	return earliest, nil
+}
+
+// documentBefore orders two documents of one case by document date, then
+// by document-number suffix. Both fields were validated by the parser.
+func documentBefore(a, b Document) bool {
+	if a.DocumentDate != b.DocumentDate {
+		return a.DocumentDate < b.DocumentDate // ISO dates compare as strings
+	}
+	return documentSuffix(a.DocumentNumber) < documentSuffix(b.DocumentNumber)
+}
+
+// documentSuffix is the running number after the dash in a document number
+// ("2026/044084-5" -> 5); 0 when malformed.
+func documentSuffix(number string) int {
+	if i := strings.LastIndexByte(number, '-'); i >= 0 {
+		n, err := strconv.Atoi(number[i+1:])
+		if err == nil {
+			return n
+		}
+	}
+	return 0
 }
 
 // persist records the observation and derives the event in one
