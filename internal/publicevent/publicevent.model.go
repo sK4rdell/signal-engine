@@ -1,6 +1,6 @@
 // Package publicevent is the source-independent domain of Signal Engine: a
 // public event is something a public source reported about an identifiable
-// organisation or workplace.
+// organisation, workplace or property.
 //
 // Two facts are kept apart on purpose. A SourceObservation is what a source
 // showed us, verbatim and append-only, in the source's own vocabulary. A

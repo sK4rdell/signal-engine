@@ -13,6 +13,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/sK4rdell/signal-engine/internal/platform/config"
 	"github.com/sK4rdell/signal-engine/internal/platform/testutil"
 	"github.com/sK4rdell/signal-engine/internal/publicevent"
@@ -193,11 +195,12 @@ func eventIDs(t *testing.T, app *testutil.App) []string {
 	return ids
 }
 
-// backdate makes every observation of a case look last confirmed long ago,
-// so the open-case refresh considers it due.
+// backdate moves every observation of a case back in time by age, so the
+// open-case refresh considers it due. Shifting (rather than setting) keeps
+// the order in which the case's states were last seen.
 func backdate(t *testing.T, app *testutil.App, recNo string, age time.Duration) {
 	t.Helper()
-	if _, err := app.Pool.Exec(context.Background(), "UPDATE source_observations SET last_observed_at = now() - $2::interval WHERE source = 'stockholm' AND source_record_id = $1", recNo, fmt.Sprintf("%d seconds", int(age.Seconds()))); err != nil {
+	if _, err := app.Pool.Exec(context.Background(), "UPDATE source_observations SET last_observed_at = last_observed_at - $2::interval WHERE source = 'stockholm' AND source_record_id = $1", recNo, fmt.Sprintf("%d seconds", int(age.Seconds()))); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -529,5 +532,84 @@ func TestIngest_AbortsOnSourceFailure(t *testing.T) {
 	}
 	if n := countRows(t, app, "public_events", "source = 'stockholm'"); n != 1 {
 		t.Errorf("events = %d, want the one persisted before the failure", n)
+	}
+}
+
+// TestIngest_RefreshUsesMostRecentlyObservedState guards the selection of
+// a case's current state. Observations are deduplicated by content, so a
+// case that goes open (A) → closed (B) → open (A again) refreshes A's
+// last_observed_at instead of inserting a third row; B keeps the later
+// first_observed_at. The refresh must then treat A as current and re-read
+// the case, not pick B merely because it was created later.
+func TestIngest_RefreshUsesMostRecentlyObservedState(t *testing.T) {
+	c := caseSpec{recNo: "500", diary: "2026-500", property: "Bävern 1", address: "Gatan 5", district: "Södermalm", startedOn: "2026-01-20", docs: []docSpec{{desc: failedA, ts: "2026-01-20T09:00:00"}}}
+	svc := &fakeService{cases: map[string][]byte{"500": casePage(t, c)}, status: map[string]int{}}
+	svc.search = searchPage(t, c)
+	app, _ := newApp(t, svc)
+	ctx := context.Background()
+	w := window(t, "2026-01-20", "2026-01-20")
+	run := func(label string) stockholm.Stats {
+		t.Helper()
+		stats, err := app.Stockholm.Run(ctx, w)
+		if err != nil {
+			t.Fatalf("%s: %v", label, err)
+		}
+		return stats
+	}
+
+	// State A: open.
+	if stats := run("A open"); stats.ObservationsInserted != 1 {
+		t.Fatalf("A stats = %+v", stats)
+	}
+	// State B: closed.
+	c.closedOn = "2026-03-01"
+	svc.set(nil, map[string][]byte{"500": casePage(t, c)})
+	if stats := run("B closed"); stats.ObservationsInserted != 1 {
+		t.Fatalf("B stats = %+v", stats)
+	}
+	// Back to state A: open again. No new row; A's last_observed_at moves.
+	c.closedOn = ""
+	svc.set(nil, map[string][]byte{"500": casePage(t, c)})
+	if stats := run("A again"); stats.ObservationsInserted != 0 || stats.RecordsObserved != 1 {
+		t.Fatalf("A again stats = %+v", stats)
+	}
+	obs, err := publicevent.NewRepository().ListObservations(ctx, app.Pool, stockholm.Source, "500")
+	if err != nil || len(obs) != 2 {
+		t.Fatalf("observations = %d, %v; want the two states only", len(obs), err)
+	}
+	var a, b publicevent.SourceObservation
+	for _, o := range obs {
+		if strings.Contains(string(o.Payload), "2026-03-01") {
+			b = o
+		} else {
+			a = o
+		}
+	}
+	if a.ID == uuid.Nil || b.ID == uuid.Nil || !b.FirstObservedAt.After(a.FirstObservedAt) || !a.LastObservedAt.After(b.LastObservedAt) {
+		t.Fatalf("precondition: B must be created later and A seen later: A=%+v B=%+v", a, b)
+	}
+
+	// Make the case due without disturbing that order, and run a window
+	// with no new cases: the case is open by its current state and must be
+	// refreshed.
+	backdate(t, app, "500", 8*24*time.Hour)
+	svc.set(searchPage(t), nil)
+	stats := run("refresh")
+	if stats.OpenCasesRefreshed != 1 || stats.CasePagesFetched != 1 {
+		t.Errorf("refresh stats = %+v, want the case re-read (current state open)", stats)
+	}
+	if got := svc.caseRequests(); len(got) != 1 || got[0] != "500" {
+		t.Errorf("case pages fetched = %v", got)
+	}
+
+	// And the mirror image: open → closed → closed again stays out.
+	c.closedOn = "2026-03-01"
+	svc.set(searchPage(t, c), map[string][]byte{"500": casePage(t, c)})
+	run("B again")
+	backdate(t, app, "500", 8*24*time.Hour)
+	svc.set(searchPage(t), nil)
+	stats = run("no refresh")
+	if stats.OpenCasesRefreshed != 0 || len(svc.caseRequests()) != 0 {
+		t.Errorf("closed by its current state must not be refreshed: %+v %v", stats, svc.caseRequests())
 	}
 }

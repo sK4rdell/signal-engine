@@ -154,9 +154,11 @@ a new certificate is approved.
 
 ## 4. Dataset (VERIFIED)
 
-Population: every case in class 7.2 *Hantera tillsyn av hissar och andra
-motordrivna anordningar* started 2025-09-01 to 2026-09-25 (three search
-windows), and every case's page. No document was ordered.
+Population: every case in case group *Funktionskontroll, Tillstånd*
+(`CaseTypeRecNo=200001`) with diarieplansbeteckning 7.2 *Hantera tillsyn
+av hissar och andra motordrivna anordningar* (`JournalPlanCode=7.2`)
+started 2025-09-01 to 2026-09-25 (three search windows), and every
+case's page. No document was ordered.
 
 | | |
 | --- | --- |
@@ -199,12 +201,22 @@ certificates read "ej godkänt," with no identifier.
 **Deterministic rule** (VERIFIED against all 4,474 documents):
 
 ```text
-case class code = 7.2 (Funktionskontroll, Tillstånd)
+case group = Funktionskontroll, Tillstånd (CaseTypeRecNo=200001)
+AND diarieplansbeteckning = 7.2 (JournalPlanCode=7.2)
 AND document category = "Skrivelse In"
-AND document description matches ^Intyg (återkommande |första |revisions)?besiktning, ej godkänt
-      (also ^Intyg ombesiktning, ej godkänt — not observed in the period)
+AND document description matches ^Intyg (återkommande |första |revisions)?besiktning, ej godkän[dt]
+      (also ^Intyg ombesiktning, ej godkän[dt] — not observed in the period)
 → DETERMINISTIC_FAILURE
 ```
+
+This is the rule the adapter implements (`IsFailedCertificate` in
+`internal/source/stockholm`): the group and diarieplansbeteckning are
+the search filters, so every fetched case satisfies them; the category
+and the description pattern are checked per document. "första
+besiktning" and "revisionsbesiktning" were not observed in the period
+either; they are accepted because they are the other certificate kinds
+the inspection bodies issue under the same duty, and the regression
+tests cover all four forms.
 
 "delvis godkänt" → SPECIFIC_BUT_AMBIGUOUS (49); "godkänt", reminders,
 notes, complaints → NOT_A_FAILURE; cases without any certificate →
@@ -257,8 +269,8 @@ Failed-certificate documents by month (document date):
 Twelve full months (Sep 2025 – Aug 2026): **1,947 failed certificates**,
 about 160 a month, on about 150 distinct properties a month. Earlier
 years are consistent: 1,585 cases (2019), 1,522 (2022), 1,447 (2024),
-1,247 (2025) under the class codes 587/7.2, of which about nine in ten
-are failures.
+1,247 (2025) under diarieplansbeteckning 587 (until 2023) and 7.2 (from
+2024), of which about nine in ten are failures.
 
 | Asset type (case title) | Failed documents | Share | Distinct asset identifiers |
 | --- | ---: | ---: | ---: |
@@ -514,10 +526,12 @@ Not implemented. If continued:
   (about 5 per weekday). Re-fetch open cases for a bounded period to
   see later documents.
 * **Pagination**: none needed; the search embeds the full result set.
-* **Acceptance rule**: a document in a 7.2 case whose description starts
-  with `Intyg återkommande besiktning, ej godkänt` (also `Intyg
-  ombesiktning, ej godkänt`); "godkänt", "delvis godkänt", reminders,
-  complaints and notes are not events.
+* **Acceptance rule**: the deterministic rule of section 5 as written:
+  an incoming document (`Skrivelse In`) of a case in group
+  *Funktionskontroll, Tillstånd* with diarieplansbeteckning 7.2 whose
+  description matches `^Intyg (återkommande |första |revisions)?besiktning,
+  ej godkän[dt]` or `^Intyg ombesiktning, ej godkän[dt]`; "godkänt",
+  "delvis godkänt", reminders, complaints and notes are not events.
 * **Identity**: the source has no document id. Source record = the case
   (`RecNo`), observation payload = case metadata plus the document list,
   so a later approved certificate appended to the case is a changed
