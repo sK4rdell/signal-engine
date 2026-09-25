@@ -213,3 +213,79 @@ curl -s 'https://www.av.se/om-oss/diarium-och-allmanna-handlingar/bestall-handli
 ```
 
 Expected: `10` (or fewer on the last page).
+
+## Enforcement and inspection-certificate document types (verified 2026-09-25)
+
+Added for the deterministic-signal spike
+(`docs/evaluations/arbetsmiljoverket-deterministic-signals.md`). Everything
+here was read from the live diary with plain HTTP; the same search
+mechanics as above apply (no session, 10 rows per page, `p=N`, inclusive
+date window, stable `Handlingsnummer`).
+
+### Subject areas (`SelectedArendeProcess`)
+
+`2.2` Anskaffa varor och tjänster, `6.1` Bedriva inspektion, `7.1` Bedriva
+marknadskontroll, `4.1` Föreskrifter, `6.3.2` Hantera Arbetsmiljöverkets
+överklagande, **`6.4` Hantera avgiftsutdömande**, `8.1` Hantera tillstånd,
+`6.3.1` Hantera överklaganden.
+
+### Document types relevant to enforcement (`SelectedHandlingType`)
+
+| Code | Handlingstyp | Documents 2025-09-25..2026-09-24 | What it is |
+| --- | --- | ---: | --- |
+| `6.4-1` | Avgiftsföreläggande | 1 385 | The sanction-fee order sent to the employer. One case per deficiency; the case title names the deficiency ("Sanktionsavgift – …"). |
+| `6.4-2` | Svar på avgiftsföreläggande | 1 111 | Employer's reply (accept / contest). |
+| `6.4-3` | Vidarebefordran av godkänt avgiftsföreläggande | 666 | Accepted order forwarded for collection. |
+| `6.4-4` | Ansökan om påförande av sanktionsavgift | 656 | Contested orders taken to the administrative court. |
+| `6.4-99` | Övriga handlingar - Avgiftsutdömande | 790 | Correspondence in fee cases. |
+| `6.1-49` | **Intyg återkommande besiktning** | 1 803 | Incoming certificate from an accredited inspection body; case title "Återkommande besiktning - <device type>". |
+| `6.1-24` | Tillsynsmeddelande | 6 175 | Outgoing supervision letter; in certificate cases AV's demand to the employer. |
+| `6.1-55` | Beslut om slutligt omedelbart förbud | 887 | Immediate prohibition; title "Inspektion - Omedelbart förbud <date> - <hazard> - <address>". |
+| `6.1-21` / `6.1-22` | Tillfälligt omedelbart förbud / upphävande | 14 / 18 | Rare. |
+| `6.1-56` | Beslut om upphävande av förbud | 239 | Prohibition lifted. |
+| `6.1-33` / `6.1-34` | Beslut om förbud med / utan vite | 160 / 1 | Titles are campaign or incident names, not the deficiency. |
+| `6.1-35` / `6.1-36` | Beslut om föreläggande med / utan vite | 264 / 2 | Same. |
+| `6.1-32` | Underrättelse om föreläggande/förbud | 362 | Advance notice of an order. |
+| `6.1-17` | Registrerad kontroll | 30 269 | Internal record of a performed inspection; no content. |
+| `6.1-14` | Anmälan, rapport från yrkeshygienisk mätning | 101 | Incoming exposure-measurement reports ("Yrkeshygienisk mätning - <agent>"). |
+| `6.1-15` | Anmälan, rapport från medicinsk kontroll | 2 | Incoming medical-surveillance reports. |
+| `6.1-20` | Dokumenterad bedömning inklusive brister och krav | 0 | Not used in the period. |
+
+Calendar-year counts for `6.4-1`: 1 641 (2024), 1 761 (2025). For `6.1-49`:
+1 706 (2025).
+
+### Sanction-fee cases (`6.4`)
+
+* Sanction cases are **separate cases** from the inspection that found the
+  deficiency. The `6.4` case holds only the fee documents; the preceding
+  inspection lives in a `6.1` case for the same organisation, usually with
+  a `Faktaunderlag` dated the same day as the order.
+* Rows carry organisation number (81 %), CFAR (83 %) and workplace name
+  (78 %). Posting-of-workers cases (`utstationering`) are the main gap:
+  foreign employers have no Swedish identifiers.
+* The case page adds county and municipality; the fee documents in
+  ongoing cases are often marked as not releasable.
+
+### Inspection certificates (`6.1-49`)
+
+* AFS 2023:11 13 kap. 13 §: "Om kontrollorganet bedömer att anordningen
+  inte erbjuder betryggande säkerhet, ska de snarast meddela detta till
+  Arbetsmiljöverket." Bilaga (arbetskorgar) 3.3 and 10 kap. 41 § (boilers
+  that may not be operated) carry the same duty. An incoming `Intyg
+  återkommande besiktning` is therefore a device that **failed** its
+  recurring inspection. A handful of rows are titled "För kännedom -
+  godkänd besiktning" and are the exception.
+* Observed case pattern (sampled case pages): Intyg (day 0) →
+  Tillsynsmeddelande to the employer (0–22 days) → Påminnelse → Svar på
+  kravskrivelse → Beslut om att ärende avslutas, sometimes with a second
+  Intyg when the device passes re-inspection.
+* Rows carry organisation number (97 %) and CFAR (93 %); the workplace
+  differs from the legal entity in about a third of cases.
+
+### Lookups by identifier
+
+`SearchText` matches organisation numbers **and CFAR numbers**, so the
+history of a workplace can be listed with `SearchText=<CFAR>` plus a date
+window without the (larger) `Company/?orgnr=` page. `Company/?orgnr=…&p=N`
+returned HTTP 500 for one organisation during the spike; the search route
+did not.
