@@ -252,17 +252,26 @@ func TestLoadFrom_SourcesDefaultsAndValidation(t *testing.T) {
 	if cfg.Sources.Arbetsmiljoverket.BaseURL != "https://www.av.se" || cfg.Sources.Arbetsmiljoverket.RequestInterval != time.Second {
 		t.Errorf("defaults = %+v", cfg.Sources.Arbetsmiljoverket)
 	}
+	if cfg.Sources.Stockholm.BaseURL != "https://etjanster.stockholm.se" || cfg.Sources.Stockholm.RequestInterval != time.Second || cfg.Sources.Stockholm.RefreshInterval != 7*24*time.Hour {
+		t.Errorf("stockholm defaults = %+v", cfg.Sources.Stockholm)
+	}
 
 	cfg, err = LoadFrom(lookupFrom(map[string]string{
 		"DATABASE_URL":                       "postgres://app:app@localhost:5432/app?sslmode=disable",
 		"ARBETSMILJOVERKET_BASE_URL":         "http://127.0.0.1:9999",
 		"ARBETSMILJOVERKET_REQUEST_INTERVAL": "0",
+		"STOCKHOLM_BASE_URL":                 "http://127.0.0.1:9998",
+		"STOCKHOLM_REQUEST_INTERVAL":         "0",
+		"STOCKHOLM_REFRESH_INTERVAL":         "48h",
 	}))
 	if err != nil {
 		t.Fatalf("LoadFrom: %v", err)
 	}
 	if cfg.Sources.Arbetsmiljoverket.BaseURL != "http://127.0.0.1:9999" || cfg.Sources.Arbetsmiljoverket.RequestInterval != 0 {
 		t.Errorf("overrides = %+v", cfg.Sources.Arbetsmiljoverket)
+	}
+	if cfg.Sources.Stockholm.BaseURL != "http://127.0.0.1:9998" || cfg.Sources.Stockholm.RequestInterval != 0 || cfg.Sources.Stockholm.RefreshInterval != 48*time.Hour {
+		t.Errorf("stockholm overrides = %+v", cfg.Sources.Stockholm)
 	}
 
 	for name, values := range map[string]map[string]string{
@@ -276,6 +285,22 @@ func TestLoadFrom_SourcesDefaultsAndValidation(t *testing.T) {
 			_, err := LoadFrom(lookupFrom(values))
 			if err == nil || !strings.Contains(err.Error(), "ARBETSMILJOVERKET_") {
 				t.Fatalf("expected an ARBETSMILJOVERKET_ error, got %v", err)
+			}
+		})
+	}
+	for name, values := range map[string]map[string]string{
+		"base url with path":        {"STOCKHOLM_BASE_URL": "https://etjanster.stockholm.se/Byggochplantjansten/"},
+		"base url not a url":        {"STOCKHOLM_BASE_URL": "etjanster.stockholm.se"},
+		"negative interval":         {"STOCKHOLM_REQUEST_INTERVAL": "-1s"},
+		"malformed interval":        {"STOCKHOLM_REQUEST_INTERVAL": "soon"},
+		"zero refresh interval":     {"STOCKHOLM_REFRESH_INTERVAL": "0"},
+		"negative refresh interval": {"STOCKHOLM_REFRESH_INTERVAL": "-24h"},
+	} {
+		t.Run("stockholm "+name, func(t *testing.T) {
+			values["DATABASE_URL"] = "postgres://app:app@localhost:5432/app?sslmode=disable"
+			_, err := LoadFrom(lookupFrom(values))
+			if err == nil || !strings.Contains(err.Error(), "STOCKHOLM_") {
+				t.Fatalf("expected a STOCKHOLM_ error, got %v", err)
 			}
 		})
 	}

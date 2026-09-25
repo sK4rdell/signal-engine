@@ -23,6 +23,7 @@ import (
 	"github.com/sK4rdell/signal-engine/internal/platform/server"
 	"github.com/sK4rdell/signal-engine/internal/publicevent"
 	"github.com/sK4rdell/signal-engine/internal/source/arbetsmiljoverket"
+	"github.com/sK4rdell/signal-engine/internal/source/stockholm"
 )
 
 // Deps are the infrastructure values the application is built from.
@@ -45,6 +46,9 @@ type App struct {
 	// Arbetsmiljoverket ingests the diary feeds (inspection notices,
 	// recurring-inspection failures); run by cmd/ingest.
 	Arbetsmiljoverket *arbetsmiljoverket.Ingester
+	// Stockholm ingests failed inspections of lifts and other motorised
+	// building equipment from Stockholms stad; run by cmd/ingest.
+	Stockholm *stockholm.Ingester
 }
 
 // New wires the application. The router serves the API; the worker has every
@@ -97,6 +101,10 @@ func New(deps Deps) (*App, error) {
 	if err != nil {
 		return nil, err
 	}
+	stockholmClient, err := stockholm.NewClient(deps.Config.Sources.Stockholm, nil)
+	if err != nil {
+		return nil, err
+	}
 
 	return &App{
 		Router:            router,
@@ -104,5 +112,6 @@ func New(deps Deps) (*App, error) {
 		Auth:              authService,
 		Accounts:          accountRepo,
 		Arbetsmiljoverket: arbetsmiljoverket.NewIngester(avClient, publicEventRepo, deps.Pool, deps.Logger),
+		Stockholm:         stockholm.NewIngester(stockholmClient, publicEventRepo, deps.Pool, deps.Logger, deps.Config.Sources.Stockholm.RefreshInterval),
 	}, nil
 }

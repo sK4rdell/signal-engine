@@ -20,7 +20,12 @@ import (
 
 // Sources known to the domain. The value is stored on observations and
 // events and accepted by the source filter of the listing.
-const SourceArbetsmiljoverket = "arbetsmiljoverket"
+const (
+	SourceArbetsmiljoverket = "arbetsmiljoverket"
+	// SourceStockholm is Stockholms stad's building and planning service
+	// (Bygg- och plantjänsten).
+	SourceStockholm = "stockholm"
+)
 
 // EventType says what happened, independently of which source reported it.
 type EventType string
@@ -36,6 +41,12 @@ const (
 	// not meet the required safety standard, and its certificate was
 	// registered by the work environment authority.
 	EventTypeWorkEquipmentInspectionFailed EventType = "WORK_EQUIPMENT_INSPECTION_FAILED"
+	// EventTypeMotorisedBuildingEquipmentInspectionFailed: a regulated
+	// motorised device in a building (a lift, a powered door or gate, an
+	// escalator or similar) failed its mandatory inspection, as recorded by
+	// the municipal building authority. The primary identity is the
+	// property, not an organisation.
+	EventTypeMotorisedBuildingEquipmentInspectionFailed EventType = "MOTORISED_BUILDING_EQUIPMENT_INSPECTION_FAILED"
 )
 
 // SourceObservation is one observed state of one source record.
@@ -82,7 +93,17 @@ type PublicEvent struct {
 	// WorkplaceCFAR is the SCB workplace identifier, or "" when unknown.
 	WorkplaceCFAR string
 	WorkplaceName string
-	SourceURL     string
+	// PropertyMunicipalityCode is the four-digit Swedish municipality code
+	// of the property the event concerns ("0180" for Stockholm), or ""
+	// when the event has no property.
+	PropertyMunicipalityCode string
+	// PropertyDesignation is the property designation (fastighetsbeteckning)
+	// as the source wrote it, or "" when the event has no property.
+	PropertyDesignation string
+	// PropertyAddress is the source's street address for the property; it
+	// is optional and "" when the source gave none.
+	PropertyAddress string
+	SourceURL       string
 	// ObservationID is the observation the event was last derived from.
 	ObservationID   uuid.UUID
 	FirstObservedAt time.Time
@@ -96,19 +117,24 @@ type PublicEvent struct {
 
 // NewEvent is the input for creating or refreshing an event from an
 // observation. Empty OrganisationNumber and WorkplaceCFAR are stored as
-// NULL.
+// NULL. A property is given by PropertyMunicipalityCode and
+// PropertyDesignation together (both or neither); PropertyAddress is
+// optional and only allowed with a property.
 type NewEvent struct {
-	Source             string
-	SourceEventID      string
-	EventType          EventType
-	OccurredOn         time.Time
-	Title              string
-	OrganisationNumber string
-	OrganisationName   string
-	WorkplaceCFAR      string
-	WorkplaceName      string
-	SourceURL          string
-	ObservationID      uuid.UUID
+	Source                   string
+	SourceEventID            string
+	EventType                EventType
+	OccurredOn               time.Time
+	Title                    string
+	OrganisationNumber       string
+	OrganisationName         string
+	WorkplaceCFAR            string
+	WorkplaceName            string
+	PropertyMunicipalityCode string
+	PropertyDesignation      string
+	PropertyAddress          string
+	SourceURL                string
+	ObservationID            uuid.UUID
 }
 
 // UpsertOutcome reports what UpsertEvent did.

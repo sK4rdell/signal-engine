@@ -155,6 +155,19 @@ type JobsConfig struct {
 // SourcesConfig configures the public data sources read by cmd/ingest.
 type SourcesConfig struct {
 	Arbetsmiljoverket ArbetsmiljoverketConfig
+	Stockholm         StockholmConfig
+}
+
+// StockholmConfig configures the client for Stockholms stad's building and
+// planning service (Bygg- och plantjänsten).
+type StockholmConfig struct {
+	// BaseURL is the origin of the service; tests point it at a local server.
+	BaseURL string
+	// RequestInterval is the minimum time between two requests to the source.
+	RequestInterval time.Duration
+	// RefreshInterval is how long an unchanged open case is left alone
+	// before ingestion re-reads its page for new documents or closure.
+	RefreshInterval time.Duration
 }
 
 // ArbetsmiljoverketConfig configures the Arbetsmiljöverket web diary client.
@@ -250,6 +263,11 @@ func LoadFrom(lookup Lookup) (Config, error) {
 		Arbetsmiljoverket: ArbetsmiljoverketConfig{
 			BaseURL:         e.str("ARBETSMILJOVERKET_BASE_URL", "https://www.av.se"),
 			RequestInterval: e.duration("ARBETSMILJOVERKET_REQUEST_INTERVAL", time.Second),
+		},
+		Stockholm: StockholmConfig{
+			BaseURL:         e.str("STOCKHOLM_BASE_URL", "https://etjanster.stockholm.se"),
+			RequestInterval: e.duration("STOCKHOLM_REQUEST_INTERVAL", time.Second),
+			RefreshInterval: e.duration("STOCKHOLM_REFRESH_INTERVAL", 7*24*time.Hour),
 		},
 	}
 
@@ -362,6 +380,15 @@ func (c Config) validate() error {
 	}
 	if c.Sources.Arbetsmiljoverket.RequestInterval < 0 {
 		fail("ARBETSMILJOVERKET_REQUEST_INTERVAL must not be negative")
+	}
+	if err := validateOrigin(c.Sources.Stockholm.BaseURL); err != nil {
+		fail("STOCKHOLM_BASE_URL: %w", err)
+	}
+	if c.Sources.Stockholm.RequestInterval < 0 {
+		fail("STOCKHOLM_REQUEST_INTERVAL must not be negative")
+	}
+	if c.Sources.Stockholm.RefreshInterval <= 0 {
+		fail("STOCKHOLM_REFRESH_INTERVAL must be positive")
 	}
 
 	if c.Environment == Production {

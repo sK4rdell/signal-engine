@@ -61,7 +61,7 @@ make help              list every target
 make dev               run the API locally (sources .env)
 make worker            run the background worker locally
 make build             build bin/api, bin/worker, bin/migrate, bin/ingest
-make ingest            ingest Arbetsmiljöverket inspection notices (from=, to=)
+make ingest            ingest a source window (source=, feed=, from=, to=)
 make test              run all tests against the compose PostgreSQL and Mailpit
 make test-race         same, with the race detector
 make lint              gofmt check, go vet, golangci-lint (when installed)
@@ -92,13 +92,16 @@ make migration name=create_widgets # scaffold migrations/<timestamp>_create_widg
 
 ## 4b. Ingesting public events
 
-Signal Engine turns public records into public events. The first source is
+Signal Engine turns public records into public events. Two sources exist:
 Arbetsmiljöverket's web diary (`docs/sources/arbetsmiljoverket.md`), with
-two feeds: inspection notices and failed recurring inspections:
+two feeds, inspection notices and failed recurring inspections, and
+Stockholm's building case service (`docs/sources/stockholm.md`) for failed
+inspections of lifts and other motorised building equipment:
 
 ```bash
 make ingest from=2026-09-20 to=2026-09-23   # inclusive dates; defaults to yesterday
 make ingest feed=recurring-inspection-failures from=2026-09-20 to=2026-09-23
+make ingest source=stockholm from=2026-09-01 to=2026-09-24
 curl -s -b cookies 'localhost:8080/v1/public-events?from=2026-09-20&limit=100'
 ```
 
@@ -158,7 +161,7 @@ cmd/
   api/            HTTP server (optionally with embedded worker)
   worker/         background job worker
   migrate/        goose migrations: up | down | status | version
-  ingest/         manual source ingestion: ingest arbetsmiljoverket [--feed …] --from --to
+  ingest/         manual source ingestion: ingest arbetsmiljoverket [--feed …] | stockholm --from --to
 internal/
   app/            composition root: wires config, infrastructure, features, routes, jobs
   auth/           users, sessions, signup/login/logout, email verification, password reset
@@ -167,6 +170,7 @@ internal/
   publicevent/    source observations, canonical public events, GET /v1/public-events
   source/
     arbetsmiljoverket/  web diary client, parser and ingester (source-specific code only)
+    stockholm/          building case service client, parser and ingester
   platform/
     api/          typed handler wrapper, binding, strict JSON, validation, errors, middleware, router
     apperror/     application error type and stable public codes

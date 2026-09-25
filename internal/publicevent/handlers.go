@@ -30,9 +30,11 @@ type Response struct {
 	Organisation *OrganisationResponse `json:"organisation"`
 	// Workplace is null when the source gave neither identifier nor name.
 	Workplace *WorkplaceResponse `json:"workplace"`
-	Source    SourceResponse     `json:"source"`
-	CreatedAt time.Time          `json:"created_at"`
-	UpdatedAt time.Time          `json:"updated_at"`
+	// Property is null when the event does not concern a property.
+	Property  *PropertyResponse `json:"property"`
+	Source    SourceResponse    `json:"source"`
+	CreatedAt time.Time         `json:"created_at"`
+	UpdatedAt time.Time         `json:"updated_at"`
 }
 
 // OrganisationResponse identifies the legal organisation.
@@ -45,6 +47,16 @@ type OrganisationResponse struct {
 type WorkplaceResponse struct {
 	CFAR *string `json:"cfar"`
 	Name string  `json:"name"`
+}
+
+// PropertyResponse identifies a property (fastighet).
+type PropertyResponse struct {
+	// MunicipalityCode is the four-digit Swedish municipality code.
+	MunicipalityCode string `json:"municipality_code"`
+	// Designation is the property designation as the source wrote it.
+	Designation string `json:"designation"`
+	// Address is the source's street address, null when it gave none.
+	Address *string `json:"address"`
 }
 
 // SourceResponse is the provenance of an event.
@@ -80,6 +92,9 @@ func toResponse(e PublicEvent) Response {
 	if e.WorkplaceCFAR != "" || e.WorkplaceName != "" {
 		res.Workplace = &WorkplaceResponse{CFAR: nullIfEmpty(e.WorkplaceCFAR), Name: e.WorkplaceName}
 	}
+	if e.PropertyDesignation != "" {
+		res.Property = &PropertyResponse{MunicipalityCode: e.PropertyMunicipalityCode, Designation: e.PropertyDesignation, Address: nullIfEmpty(e.PropertyAddress)}
+	}
 	if res.Source.Record == nil {
 		res.Source.Record = json.RawMessage("null")
 	}
@@ -88,8 +103,8 @@ func toResponse(e PublicEvent) Response {
 
 // ListRequest binds the query of GET /v1/public-events.
 type ListRequest struct {
-	Source             string `query:"source" json:"-" validate:"omitempty,oneof=arbetsmiljoverket"`
-	EventType          string `query:"event_type" json:"-" validate:"omitempty,oneof=WORK_ENVIRONMENT_INSPECTION_NOTICE WORK_EQUIPMENT_INSPECTION_FAILED"`
+	Source             string `query:"source" json:"-" validate:"omitempty,oneof=arbetsmiljoverket stockholm"`
+	EventType          string `query:"event_type" json:"-" validate:"omitempty,oneof=WORK_ENVIRONMENT_INSPECTION_NOTICE WORK_EQUIPMENT_INSPECTION_FAILED MOTORISED_BUILDING_EQUIPMENT_INSPECTION_FAILED"`
 	From               string `query:"from" json:"-" validate:"omitempty,datetime=2006-01-02"`
 	To                 string `query:"to" json:"-" validate:"omitempty,datetime=2006-01-02"`
 	OrganisationNumber string `query:"organisation_number" json:"-" validate:"omitempty,max=20"`
