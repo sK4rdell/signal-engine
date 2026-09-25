@@ -159,6 +159,9 @@ func TestPublicEvents_Filters(t *testing.T) {
 	if got := ids(base + "?source=arbetsmiljoverket&event_type=WORK_ENVIRONMENT_INSPECTION_NOTICE"); len(got) != 3 {
 		t.Errorf("source + type = %v", got)
 	}
+	if got := ids(base + "?event_type=WORK_EQUIPMENT_INSPECTION_FAILED"); len(got) != 0 {
+		t.Errorf("failed-inspection type must be accepted by the filter and match nothing here: %v", got)
+	}
 
 	for path, field := range map[string]string{
 		base + "?event_type=SOMETHING_ELSE":      "event_type",

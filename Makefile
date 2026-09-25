@@ -30,8 +30,8 @@ worker: ## Run the background worker locally (sources .env)
 	$(LOAD_ENV) go run ./cmd/worker
 
 .PHONY: ingest
-ingest: ## Ingest Arbetsmiljöverket inspection notices: make ingest from=2026-09-20 to=2026-09-23
-	$(LOAD_ENV) go run ./cmd/ingest arbetsmiljoverket $(if $(from),--from $(from)) $(if $(to),--to $(to))
+ingest: ## Ingest an Arbetsmiljöverket feed: make ingest [feed=recurring-inspection-failures] from=2026-09-20 to=2026-09-23
+	$(LOAD_ENV) go run ./cmd/ingest arbetsmiljoverket $(if $(feed),--feed $(feed)) $(if $(from),--from $(from)) $(if $(to),--to $(to))
 
 .PHONY: build
 build: ## Build all binaries into bin/

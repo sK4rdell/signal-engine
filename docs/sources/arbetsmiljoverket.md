@@ -14,6 +14,58 @@ programmatically accessible: documents must be ordered through a shopping
 cart and are delivered by email after a manual secrecy review. See
 "Document content" below.
 
+## Feeds ingested
+
+The adapter runs one of two verified selections of the diary (a *feed*).
+Both use the same search, parser, observation and event code; a feed only
+sets the search filter, the expected document type name, an acceptance
+rule and the canonical event type.
+
+| Feed (`--feed`) | Filter | Rows accepted | Event type |
+| --- | --- | --- | --- |
+| `inspection-notices` (default) | `6.1` / `6.1-23` Inspektionsmeddelande | every row of that type | `WORK_ENVIRONMENT_INSPECTION_NOTICE` |
+| `recurring-inspection-failures` | `6.1` / `6.1-49` Intyg återkommande besiktning | origin `Inkommande` **and** case title starting with "Återkommande besiktning" (case-insensitive) | `WORK_EQUIPMENT_INSPECTION_FAILED` |
+
+```bash
+make ingest from=2026-09-20 to=2026-09-23                                        # inspection notices (unchanged)
+make ingest feed=recurring-inspection-failures from=2026-09-20 to=2026-09-23     # failed recurring inspections
+go run ./cmd/ingest arbetsmiljoverket --feed recurring-inspection-failures --from 2026-09-20 --to 2026-09-23
+```
+
+Why the second feed means "failed": AFS 2023:11 13 kap. 13 § obliges the
+accredited inspection body to notify Arbetsmiljöverket when a device
+"inte erbjuder betryggande säkerhet" (bilaga 3.3 for work baskets and
+10 kap. 41 § for boilers carry the same duty), so an incoming certificate
+registered in a recurring-inspection case is a device that did not pass.
+Rows of the same document type in other cases (inspection campaigns,
+notifications, "För kännedom - godkänd besiktning") are not failures; the
+acceptance rule skips them, counts them as `records_skipped` and logs the
+document number, title, origin and reason. Skipped rows produce neither an
+observation nor an event. The evaluation behind the rule, with the
+twelve-month counts, is
+[docs/evaluations/arbetsmiljoverket-deterministic-signals.md](../evaluations/arbetsmiljoverket-deterministic-signals.md).
+
+The event keeps the source's case title verbatim ("Återkommande
+besiktning - Fordonslyft flerpelarlyft"); the device family (lifting,
+pressure) is not part of the canonical event and is left to a later
+recipe or assessment layer, per `docs/public-events.md`.
+
+Two limitations to keep in mind when reading these events:
+
+* `occurred_on` is the date the certificate was registered at
+  Arbetsmiljöverket, not the inspection date; the lag between them is
+  not visible in the diary.
+* The failed inspection is deterministic; whether the employer has
+  already chosen a repair supplier when the event appears is not known
+  from the source (see the evaluation, section 5).
+* A recurring-inspection case can receive a second certificate weeks
+  later (7 % of cases in the evaluation), normally the re-inspection
+  result that closes the case. The acceptance rule cannot tell it from
+  the first certificate without the document, so it becomes a second
+  event of the same type; the document number suffix (`-5` rather than
+  `-1`) and the case status in the payload are the hints. Observed in
+  the smoke run: `2026/044084-5`.
+
 ## Public entry point
 
 ```text
@@ -285,6 +337,8 @@ Calendar-year counts for `6.4-1`: 1 641 (2024), 1 761 (2025). For `6.1-49`:
   Intyg when the device passes re-inspection.
 * Rows carry organisation number (97 %) and CFAR (93 %); the workplace
   differs from the legal entity in about a third of cases.
+* Ingested by the `recurring-inspection-failures` feed (see "Feeds
+  ingested" above) as `WORK_EQUIPMENT_INSPECTION_FAILED` events.
 
 ### Lookups by identifier
 
