@@ -30,7 +30,10 @@ type fakeDiary struct {
 	status     int
 	caseBodies map[string][]byte
 	caseStatus int
-	requests   int
+	// caseEveryPage serves the case body on every page number, so the
+	// case-scoped search never reaches an empty page.
+	caseEveryPage bool
+	requests      int
 	// caseSearches records the SearchText values asked for.
 	caseSearches []string
 }
@@ -50,7 +53,7 @@ func (f *fakeDiary) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "boom", f.caseStatus)
 			return
 		}
-		if body, ok := f.caseBodies[text]; ok && r.URL.Query().Get("p") == "1" {
+		if body, ok := f.caseBodies[text]; ok && (f.caseEveryPage || r.URL.Query().Get("p") == "1") {
 			_, _ = w.Write(body)
 			return
 		}
@@ -587,5 +590,61 @@ func TestIngest_SeparateCasesStayIndependent(t *testing.T) {
 	}
 	if len(diary.caseSearches) != 2 {
 		t.Errorf("each certificate is checked against its own case: %v", diary.caseSearches)
+	}
+}
+
+func TestIngest_CaseChronologyFailsClosed(t *testing.T) {
+	later := readFixture(t, "search_page_certificate_later_only.html")
+	empty := readFixture(t, "search_page_empty.html")
+	caseBody := string(readFixture(t, "search_page_case_044084.html"))
+
+	// The earlier certificate's row cannot be parsed (its date is broken)
+	// while the later one parses: the chronology is not proven, so the
+	// candidate must not become a failure event.
+	broken := strings.Replace(caseBody, `datetime="2026-06-29"`, `datetime="not-a-date"`, 1)
+	if broken == caseBody {
+		t.Fatal("fixture did not contain the date to break")
+	}
+	// The listing claims far more rows than any page shows and every page
+	// is non-empty: the bound is hit with rows remaining.
+	unbounded := strings.Replace(caseBody, `class="fw-bold">2<`, `class="fw-bold">999<`, 1)
+	if unbounded == caseBody {
+		t.Fatal("fixture did not contain the total to change")
+	}
+
+	for name, tc := range map[string]struct {
+		caseBody  string
+		everyPage bool
+		wantText  string
+	}{
+		"earlier row unparsable":    {caseBody: broken, wantText: "could not be parsed"},
+		"pagination bound exceeded": {caseBody: unbounded, everyPage: true, wantText: "more than 10 pages"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			diary := &fakeDiary{body: later, empty: empty, caseBodies: map[string][]byte{"2026/044084": []byte(tc.caseBody)}, caseEveryPage: tc.everyPage}
+			server := httptest.NewServer(diary)
+			defer server.Close()
+			app := testutil.NewApp(t, testutil.WithConfig(func(cfg *config.Config) {
+				cfg.Sources.Arbetsmiljoverket.BaseURL = server.URL
+			}))
+
+			stats, err := app.Arbetsmiljoverket.RunFeed(context.Background(), arbetsmiljoverket.FeedRecurringInspectionFailures, certificateWindow(t, "2026-09-20", "2026-09-25"))
+			if !errors.Is(err, arbetsmiljoverket.ErrCaseChronologyIncomplete) || !strings.Contains(err.Error(), "2026/044084") ||
+				!strings.Contains(err.Error(), "2026/044084-5") || !strings.Contains(err.Error(), tc.wantText) {
+				t.Fatalf("err = %v, want ErrCaseChronologyIncomplete naming case and document with %q", err, tc.wantText)
+			}
+			if stats.RecordsAccepted != 0 || stats.RecordsLaterInCase != 0 || stats.EventsInserted != 0 {
+				t.Errorf("stats = %+v", stats)
+			}
+			if ids := eventIDs(t, app); len(ids) != 0 {
+				t.Errorf("no event may be emitted on an unproven chronology: %v", ids)
+			}
+			if n := countRows(t, app, "source_observations"); n != 0 {
+				t.Errorf("no observation may be recorded for the candidate: %d", n)
+			}
+			if tc.everyPage && len(diary.caseSearches) != 10 {
+				t.Errorf("case-scoped searches = %d, want the bound of 10", len(diary.caseSearches))
+			}
+		})
 	}
 }

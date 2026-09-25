@@ -198,6 +198,11 @@ func (in *Ingester) RunFeed(ctx context.Context, feed Feed, w Window) (Stats, er
 // documents of one type, never more than a few pages.
 const maxCasePages = 10
 
+// ErrCaseChronologyIncomplete is returned (wrapped) when the source did not
+// give a complete, parsable list of a case's documents, so the earliest one
+// cannot be established. The run aborts rather than guessing.
+var ErrCaseChronologyIncomplete = errors.New("arbetsmiljoverket: case chronology incomplete")
+
 // sourceEpoch is the first date the diary covers; the case-scoped search
 // must see every earlier document of the case, whatever the run's window.
 var sourceEpoch = time.Date(2015, 1, 1, 0, 0, 0, 0, time.UTC)
@@ -208,11 +213,17 @@ var sourceEpoch = time.Date(2015, 1, 1, 0, 0, 0, 0, time.UTC)
 // result is doc when nothing earlier exists. The answer comes from source
 // chronology, not from what was ingested before, which keeps overlapping
 // and out-of-order windows correct.
+//
+// The decision is only made on a complete, fully parsed chronology. A row
+// that cannot be parsed or a listing that runs past maxCasePages with rows
+// remaining means an earlier document may be hidden, so the lookup fails
+// (ErrCaseChronologyIncomplete) instead of returning a guess.
 func (in *Ingester) earliestInCase(ctx context.Context, feed Feed, doc Document) (Document, error) {
 	docDate, _ := time.Parse(dateLayout, doc.DocumentDate) // validated by the parser
 	earliest := doc
 	seen := 0
-	for page := 1; page <= maxCasePages; page++ {
+	complete := false
+	for page := 1; page <= maxCasePages && !complete; page++ {
 		sp, err := in.client.Search(ctx, SearchQuery{
 			From:         sourceEpoch,
 			To:           docDate,
@@ -224,7 +235,11 @@ func (in *Ingester) earliestInCase(ctx context.Context, feed Feed, doc Document)
 		if err != nil {
 			return Document{}, fmt.Errorf("case %s: %w", doc.CaseNumber, err)
 		}
-		if len(sp.Documents) == 0 && len(sp.RowErrors) == 0 {
+		if len(sp.RowErrors) > 0 {
+			return Document{}, fmt.Errorf("%w: case %s: %d source rows on page %d could not be parsed", ErrCaseChronologyIncomplete, doc.CaseNumber, len(sp.RowErrors), page)
+		}
+		if len(sp.Documents) == 0 {
+			complete = true
 			break
 		}
 		for _, other := range sp.Documents {
@@ -237,10 +252,13 @@ func (in *Ingester) earliestInCase(ctx context.Context, feed Feed, doc Document)
 				earliest = other
 			}
 		}
-		seen += len(sp.Documents) + len(sp.RowErrors)
+		seen += len(sp.Documents)
 		if sp.Total > 0 && seen >= sp.Total {
-			break
+			complete = true
 		}
+	}
+	if !complete {
+		return Document{}, fmt.Errorf("%w: case %s: more than %d pages of documents (%d rows seen)", ErrCaseChronologyIncomplete, doc.CaseNumber, maxCasePages, seen)
 	}
 	return earliest, nil
 }
