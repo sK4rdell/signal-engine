@@ -14,8 +14,11 @@ func TestFeeds(t *testing.T) {
 		t.Errorf("default feed = %+v", DefaultFeed)
 	}
 	if f := FeedRecurringInspectionFailures; f.Name != "recurring-inspection-failures" || f.EventType != publicevent.EventTypeWorkEquipmentInspectionFailed ||
-		f.SubjectArea != "6.1" || f.DocumentType != "6.1-49" || f.DocumentTypeName != "Intyg återkommande besiktning" {
+		f.SubjectArea != "6.1" || f.DocumentType != "6.1-49" || f.DocumentTypeName != "Intyg återkommande besiktning" || !f.OnePerCase {
 		t.Errorf("certificate feed = %+v", f)
+	}
+	if DefaultFeed.OnePerCase {
+		t.Error("inspection notices are not limited to one per case")
 	}
 	for _, f := range Feeds() {
 		if err := f.validate(); err != nil {

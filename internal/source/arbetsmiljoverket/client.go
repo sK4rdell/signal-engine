@@ -47,6 +47,10 @@ type SearchQuery struct {
 	To           time.Time
 	SubjectArea  string
 	DocumentType string
+	// Text is the free-text filter (SearchText). The source matches it
+	// against case and document numbers, organisation numbers, names and
+	// titles; a case number therefore selects that case's documents.
+	Text string
 	// Page is 1-based; 0 means the first page.
 	Page int
 }
@@ -60,6 +64,9 @@ func (c *Client) SearchURL(q SearchQuery) string {
 	values.Set("ToDate", q.To.Format(dateLayout))
 	values.Set("SelectedArendeProcess", q.SubjectArea)
 	values.Set("SelectedHandlingType", q.DocumentType)
+	if q.Text != "" {
+		values.Set("SearchText", q.Text)
+	}
 	values.Set("SelectedSortOrder", "Dokumentdatum|Desc")
 	values.Set("OnlyActive", "false")
 	page := q.Page

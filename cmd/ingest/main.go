@@ -90,6 +90,7 @@ func run(args []string) error {
 	fmt.Printf("records observed:              %d\n", stats.RecordsObserved)
 	fmt.Printf("records accepted:              %d\n", stats.RecordsAccepted)
 	fmt.Printf("records skipped (no match):    %d\n", stats.RecordsSkipped)
+	fmt.Printf("records later in case:         %d\n", stats.RecordsLaterInCase)
 	fmt.Printf("other document types skipped:  %d\n", stats.OtherDocumentTypes)
 	fmt.Printf("observations inserted:         %d\n", stats.ObservationsInserted)
 	fmt.Printf("events inserted:               %d\n", stats.EventsInserted)

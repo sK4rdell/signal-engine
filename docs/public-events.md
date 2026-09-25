@@ -35,7 +35,7 @@ source that reported it:
 | Event type | Meaning | Produced by |
 | --- | --- | --- |
 | `WORK_ENVIRONMENT_INSPECTION_NOTICE` | a work environment authority inspected a workplace, found deficiencies and issued a written notice | Arbetsmiljöverket feed `inspection-notices` |
-| `WORK_EQUIPMENT_INSPECTION_FAILED` | an accredited inspection body found a piece of work equipment did not meet the required safety standard and its certificate was registered by the authority | Arbetsmiljöverket feed `recurring-inspection-failures` |
+| `WORK_EQUIPMENT_INSPECTION_FAILED` | an accredited inspection body found a piece of work equipment did not meet the required safety standard and its certificate was registered by the authority; one event per source case (the certificate that opened it), later re-inspection certificates are not events | Arbetsmiljöverket feed `recurring-inspection-failures` |
 
 The title of an event is the source's own wording (for Arbetsmiljöverket
 the case title, e.g. "Återkommande besiktning - Fordonslyft

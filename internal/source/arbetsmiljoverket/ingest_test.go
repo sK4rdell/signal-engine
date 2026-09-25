@@ -19,13 +19,20 @@ import (
 )
 
 // fakeDiary serves fixture pages: page 1 is whatever body is set, every
-// later page is the empty result page, unless status forces an error.
+// later page is the empty result page, unless status forces an error. A
+// search with SearchText (the ingester's case-scoped check) is answered
+// from caseBodies when the text is known there, otherwise like any other
+// search; caseStatus forces an error on those searches only.
 type fakeDiary struct {
-	mu       sync.Mutex
-	body     []byte
-	empty    []byte
-	status   int
-	requests int
+	mu         sync.Mutex
+	body       []byte
+	empty      []byte
+	status     int
+	caseBodies map[string][]byte
+	caseStatus int
+	requests   int
+	// caseSearches records the SearchText values asked for.
+	caseSearches []string
 }
 
 func (f *fakeDiary) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -37,6 +44,17 @@ func (f *fakeDiary) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	if text := r.URL.Query().Get("SearchText"); text != "" {
+		f.caseSearches = append(f.caseSearches, text)
+		if f.caseStatus != 0 {
+			http.Error(w, "boom", f.caseStatus)
+			return
+		}
+		if body, ok := f.caseBodies[text]; ok && r.URL.Query().Get("p") == "1" {
+			_, _ = w.Write(body)
+			return
+		}
+	}
 	if r.URL.Query().Get("p") == "1" {
 		_, _ = w.Write(f.body)
 		return
@@ -439,5 +457,135 @@ func TestIngest_InspectionNoticeFeedIsTheDefault(t *testing.T) {
 	}
 	if _, err := app.Arbetsmiljoverket.RunFeed(ctx, arbetsmiljoverket.Feed{Name: "half-configured"}, window(t)); err == nil {
 		t.Error("expected an error for an incomplete feed")
+	}
+}
+
+// eventIDs lists the source event IDs of every failed-inspection event.
+func eventIDs(t *testing.T, app *testutil.App) []string {
+	t.Helper()
+	page, err := publicevent.NewRepository().List(context.Background(), app.Pool, publicevent.Filter{EventType: publicevent.EventTypeWorkEquipmentInspectionFailed}, 100, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	ids := make([]string, 0, len(page.Items))
+	for _, e := range page.Items {
+		ids = append(ids, e.SourceEventID)
+	}
+	return ids
+}
+
+func TestIngest_OnlyEarliestCertificateInCaseIsAFailure(t *testing.T) {
+	// Real case 2026/044084: certificate -1 (2026-06-29) opened the case,
+	// certificate -5 (2026-09-24) came from the re-inspection and the case
+	// was closed the same day. The case-scoped search always shows both.
+	diary := &fakeDiary{
+		body:       readFixture(t, "search_page_certificate_later_only.html"),
+		empty:      readFixture(t, "search_page_empty.html"),
+		caseBodies: map[string][]byte{"2026/044084": readFixture(t, "search_page_case_044084.html")},
+	}
+	server := httptest.NewServer(diary)
+	defer server.Close()
+	app := testutil.NewApp(t, testutil.WithConfig(func(cfg *config.Config) {
+		cfg.Sources.Arbetsmiljoverket.BaseURL = server.URL
+	}))
+	ctx := context.Background()
+	feed := arbetsmiljoverket.FeedRecurringInspectionFailures
+
+	// Out of order: a narrow window sees only the later certificate first.
+	stats, err := app.Arbetsmiljoverket.RunFeed(ctx, feed, certificateWindow(t, "2026-09-20", "2026-09-25"))
+	if err != nil {
+		t.Fatalf("run 1: %v", err)
+	}
+	want := arbetsmiljoverket.Stats{Pages: 1, RecordsObserved: 1, RecordsLaterInCase: 1}
+	if stats != want {
+		t.Errorf("run 1 stats = %+v\nwant   %+v", stats, want)
+	}
+	if ids := eventIDs(t, app); len(ids) != 0 {
+		t.Errorf("later certificate must not become an event: %v", ids)
+	}
+	if n := countRows(t, app, "source_observations"); n != 0 {
+		t.Errorf("later certificate must not be observed: %d", n)
+	}
+	if len(diary.caseSearches) != 1 || diary.caseSearches[0] != "2026/044084" {
+		t.Errorf("case-scoped searches = %v", diary.caseSearches)
+	}
+	if logs := app.Logs(); !strings.Contains(logs, "not the earliest document of its type") || !strings.Contains(logs, "2026/044084-5") || !strings.Contains(logs, "2026/044084-1") {
+		t.Errorf("expected a skip log naming both certificates:\n%s", logs)
+	}
+
+	// A wider window later discovers the earlier certificate.
+	diary.set(readFixture(t, "search_page_certificate_earlier_only.html"), 0)
+	stats, err = app.Arbetsmiljoverket.RunFeed(ctx, feed, certificateWindow(t, "2026-06-01", "2026-09-25"))
+	if err != nil {
+		t.Fatalf("run 2: %v", err)
+	}
+	want = arbetsmiljoverket.Stats{Pages: 1, RecordsObserved: 1, RecordsAccepted: 1, ObservationsInserted: 1, EventsInserted: 1}
+	if stats != want {
+		t.Errorf("run 2 stats = %+v\nwant   %+v", stats, want)
+	}
+	ids := eventIDs(t, app)
+	if len(ids) != 1 || ids[0] != "2026/044084-1" {
+		t.Errorf("events = %v, want only the opening certificate", ids)
+	}
+	ev, _ := publicevent.NewRepository().List(ctx, app.Pool, publicevent.Filter{}, 10, "")
+	if e := ev.Items[0]; e.OccurredOn.Format("2006-01-02") != "2026-06-29" || e.Title != "Återkommande besiktning - Lyftbord vid lastkaj" || e.OrganisationNumber != "5593182370" || e.WorkplaceCFAR != "67577551" {
+		t.Errorf("event = %+v", e)
+	}
+
+	// A window that holds both certificates: still one event, idempotent.
+	diary.set(readFixture(t, "search_page_case_044084.html"), 0)
+	stats, err = app.Arbetsmiljoverket.RunFeed(ctx, feed, certificateWindow(t, "2026-06-01", "2026-09-25"))
+	if err != nil {
+		t.Fatalf("run 3: %v", err)
+	}
+	want = arbetsmiljoverket.Stats{Pages: 1, RecordsObserved: 2, RecordsAccepted: 1, RecordsLaterInCase: 1, EventsUnchanged: 1}
+	if stats != want {
+		t.Errorf("run 3 stats = %+v\nwant   %+v", stats, want)
+	}
+	if ids := eventIDs(t, app); len(ids) != 1 || ids[0] != "2026/044084-1" || countRows(t, app, "source_observations") != 1 {
+		t.Errorf("after overlapping runs: events %v, observations %d", ids, countRows(t, app, "source_observations"))
+	}
+
+	// The case-scoped check is part of source truth: if it fails, the run
+	// aborts rather than guessing.
+	diary.set(readFixture(t, "search_page_certificate_later_only.html"), 0)
+	diary.mu.Lock()
+	diary.caseStatus = http.StatusInternalServerError
+	diary.mu.Unlock()
+	_, err = app.Arbetsmiljoverket.RunFeed(ctx, feed, certificateWindow(t, "2026-09-20", "2026-09-25"))
+	var statusErr *arbetsmiljoverket.StatusError
+	if !errors.As(err, &statusErr) || !strings.Contains(err.Error(), "2026/044084-5") {
+		t.Fatalf("err = %v, want *StatusError naming the document", err)
+	}
+	if ids := eventIDs(t, app); len(ids) != 1 {
+		t.Errorf("failed check must not create events: %v", ids)
+	}
+}
+
+func TestIngest_SeparateCasesStayIndependent(t *testing.T) {
+	// Real pattern: the same organisation and workplace opened two cases
+	// the same day (NOBINA, two telfers). Each case's own certificate is
+	// its earliest, so both are events.
+	diary := &fakeDiary{body: readFixture(t, "search_page_certificates_two_cases.html"), empty: readFixture(t, "search_page_empty.html")}
+	server := httptest.NewServer(diary)
+	defer server.Close()
+	app := testutil.NewApp(t, testutil.WithConfig(func(cfg *config.Config) {
+		cfg.Sources.Arbetsmiljoverket.BaseURL = server.URL
+	}))
+
+	stats, err := app.Arbetsmiljoverket.RunFeed(context.Background(), arbetsmiljoverket.FeedRecurringInspectionFailures, certificateWindow(t, "2026-04-01", "2026-04-30"))
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	want := arbetsmiljoverket.Stats{Pages: 1, RecordsObserved: 2, RecordsAccepted: 2, ObservationsInserted: 2, EventsInserted: 2}
+	if stats != want {
+		t.Errorf("stats = %+v\nwant   %+v", stats, want)
+	}
+	ids := eventIDs(t, app)
+	if len(ids) != 2 || (ids[0] != "2026/024193-1" && ids[1] != "2026/024193-1") || (ids[0] != "2026/024200-1" && ids[1] != "2026/024200-1") {
+		t.Errorf("events = %v, want both cases", ids)
+	}
+	if len(diary.caseSearches) != 2 {
+		t.Errorf("each certificate is checked against its own case: %v", diary.caseSearches)
 	}
 }
