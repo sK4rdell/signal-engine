@@ -22,7 +22,7 @@ documents themselves are not fetched.
 
 | Selection | Rule | Event type |
 | --- | --- | --- |
-| cases of type `Funktionskontroll, Tillstånd` (`CaseTypeRecNo=200001`) in class `7.2` | every incoming document (`Skrivelse In`) whose description starts with `Intyg återkommande besiktning, ej godkänt` (also `Intyg första besiktning`, `Intyg revisionsbesiktning`, `Intyg ombesiktning`, `… ej godkänd`) | `MOTORISED_BUILDING_EQUIPMENT_INSPECTION_FAILED` |
+| cases in case group `Funktionskontroll, Tillstånd` (`CaseTypeRecNo=200001`) with diarieplansbeteckning `7.2` (`JournalPlanCode=7.2`) | every incoming document (`Skrivelse In`) whose description matches `^Intyg (återkommande \|första \|revisions)?besiktning, ej godkän[dt]` or `^Intyg ombesiktning, ej godkän[dt]`, case-insensitively | `MOTORISED_BUILDING_EQUIPMENT_INSPECTION_FAILED` |
 
 ```bash
 make ingest source=stockholm from=2026-09-01 to=2026-09-24
@@ -33,7 +33,7 @@ The window is the **case start date** (`Ärendestart`), not the document
 date; the two coincide for the certificate that opens a case, which is
 almost every failed certificate. Both ends are inclusive.
 
-Why an incoming certificate in a 7.2 case means "failed": PBF 5 kap. 11 §
+Why an incoming certificate in such a case means "failed": PBF 5 kap. 11 §
 second paragraph obliges the accredited inspection body to send its
 protocol to the building committee when the device has deficiencies of
 the kind in PBL 10 kap. 20 § andra stycket 1, and the committee registers
@@ -97,7 +97,7 @@ bounded (32 MB search, 4 MB case page); a bigger body fails to parse.
 ## Source record, observation, event
 
 * **Source record** = the case. `source_record_id` is the RecNo; the
-  observation payload is the whole case (diary number, class, property,
+  observation payload is the whole case (diary number, diarieplansbeteckning, property,
   address, district, start and closure dates, officer, title, document
   count, every document with description, category, timestamp and file
   name); `raw` is the case page. A case whose document list changes is a
@@ -128,10 +128,11 @@ Every run does two things, in one process, without a scheduler:
 
 1. **New case discovery**: search the window, fetch each case page once,
    record an observation and derive events.
-2. **Known open case refresh**: for every case whose latest observation
-   has no closure date and was last confirmed more than
-   `STOCKHOLM_REFRESH_INTERVAL` ago (default 7 days), fetch the page
-   again; oldest first, at most 500 per run (`MaxRefreshPerRun`). A case
+2. **Known open case refresh**: for every case whose current state (the
+   observation most recently seen, since re-observing an earlier state
+   refreshes that row rather than inserting one) has no closure date and
+   was last confirmed more than `STOCKHOLM_REFRESH_INTERVAL` ago (default
+   7 days), fetch the page again; oldest first, at most 500 per run (`MaxRefreshPerRun`). A case
    discovered in step 1 is not fetched twice. Refreshing an unchanged
    case only moves `last_observed_at`; a case that gained a failed
    certificate emits a new event; one that gained an approved certificate
@@ -159,7 +160,7 @@ STOCKHOLM_REFRESH_INTERVAL  168h
   and district are always present.
 * Nearly every lift is under a service contract, so a failed certificate
   is an open remediation need, not necessarily an open supplier selection.
-* Cases in class `587` (before 2024) are not searched; a historical
-  backfill would need a second class code.
+* Cases with diarieplansbeteckning `587` (before 2024) are not searched;
+  a historical backfill would need a second `JournalPlanCode`.
 * Stockholm only; the other municipalities scanned do not expose these
   cases the same way (see the evaluation, section 13).

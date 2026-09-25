@@ -285,16 +285,20 @@ type knownCase struct {
 	Archived bool
 }
 
-// openCasesDueSQL picks, per Stockholm case, its latest observed state and
-// keeps the ones the source still showed as open (no closure date) whose
-// state was last confirmed before the cut-off. Oldest-checked first, so a
-// bounded run still reaches every open case over time.
+// openCasesDueSQL picks, per Stockholm case, its current state and keeps
+// the ones the source still showed as open (no closure date) whose state
+// was last confirmed before the cut-off. The current state is the
+// observation most recently seen, not most recently created: observations
+// are deduplicated by content, so a case that returns to an earlier state
+// refreshes that older row's last_observed_at instead of inserting a new
+// row. Oldest-checked first, so a bounded run still reaches every open
+// case over time.
 const openCasesDueSQL = `
 	WITH latest AS (
 		SELECT DISTINCT ON (source_record_id) source_record_id, payload, last_observed_at
 		FROM source_observations
 		WHERE source = $1
-		ORDER BY source_record_id, first_observed_at DESC, id DESC
+		ORDER BY source_record_id, last_observed_at DESC, id DESC
 	)
 	SELECT source_record_id, COALESCE((payload->>'archived')::boolean, false)
 	FROM latest
