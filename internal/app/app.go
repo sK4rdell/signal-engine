@@ -42,7 +42,8 @@ type App struct {
 	Auth     *auth.Service
 	Accounts *account.Repository
 
-	// Arbetsmiljoverket ingests inspection notices; run by cmd/ingest.
+	// Arbetsmiljoverket ingests the diary feeds (inspection notices,
+	// recurring-inspection failures); run by cmd/ingest.
 	Arbetsmiljoverket *arbetsmiljoverket.Ingester
 }
 

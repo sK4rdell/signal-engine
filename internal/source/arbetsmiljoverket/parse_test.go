@@ -154,7 +154,7 @@ func TestToEvent(t *testing.T) {
 		WorkplaceCFAR:      "71466304",
 		CaseURL:            "https://www.av.se/x/Case/?id=2026/060943",
 	}
-	ev, notes := ToEvent(doc)
+	ev, notes := ToEvent(doc, publicevent.EventTypeWorkEnvironmentInspectionNotice)
 	if notes != (MappingNotes{}) {
 		t.Errorf("notes = %+v", notes)
 	}
@@ -168,29 +168,36 @@ func TestToEvent(t *testing.T) {
 
 	// Missing organisation, placeholder workplace name.
 	doc.OrganisationNumber, doc.OrganisationName, doc.WorkplaceName = "", "", "Saknas"
-	ev, notes = ToEvent(doc)
+	ev, notes = ToEvent(doc, publicevent.EventTypeWorkEnvironmentInspectionNotice)
 	if notes != (MappingNotes{}) || ev.OrganisationNumber != "" || ev.OrganisationName != "" || ev.WorkplaceName != "" || ev.WorkplaceCFAR != "71466304" {
 		t.Errorf("event = %+v, notes = %+v", ev, notes)
 	}
 
 	// Invalid identifiers are dropped, never guessed, and reported.
 	doc.OrganisationNumber, doc.WorkplaceCFAR = "5594800419", "7146630"
-	ev, notes = ToEvent(doc)
+	ev, notes = ToEvent(doc, publicevent.EventTypeWorkEnvironmentInspectionNotice)
 	if !notes.InvalidOrganisationNumber || !notes.InvalidWorkplaceCFAR || ev.OrganisationNumber != "" || ev.WorkplaceCFAR != "" {
 		t.Errorf("event = %+v, notes = %+v", ev, notes)
 	}
 
 	// "Saknas" in the CFAR field is absent, not invalid.
 	doc.OrganisationNumber, doc.WorkplaceCFAR = "5594800418", "Saknas"
-	ev, notes = ToEvent(doc)
+	ev, notes = ToEvent(doc, publicevent.EventTypeWorkEnvironmentInspectionNotice)
 	if notes != (MappingNotes{}) || ev.WorkplaceCFAR != "" {
 		t.Errorf("event = %+v, notes = %+v", ev, notes)
 	}
 
 	// Hyphenated organisation number is normalised.
 	doc.OrganisationNumber, doc.WorkplaceCFAR = "559480-0418", "71466304"
-	ev, notes = ToEvent(doc)
+	ev, notes = ToEvent(doc, publicevent.EventTypeWorkEnvironmentInspectionNotice)
 	if notes != (MappingNotes{}) || ev.OrganisationNumber != "5594800418" {
 		t.Errorf("event = %+v, notes = %+v", ev, notes)
+	}
+
+	// The event type is the feed's; the title stays the source's wording.
+	doc.CaseTitle = "Återkommande besiktning - Fordonslyft flerpelarlyft"
+	ev, _ = ToEvent(doc, publicevent.EventTypeWorkEquipmentInspectionFailed)
+	if ev.EventType != publicevent.EventTypeWorkEquipmentInspectionFailed || ev.Title != doc.CaseTitle {
+		t.Errorf("event = %+v", ev)
 	}
 }

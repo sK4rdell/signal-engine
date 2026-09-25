@@ -1,11 +1,13 @@
 // Command ingest fetches public records from a source for a bounded date
 // window and stores them as source observations and public events.
 //
-//	ingest arbetsmiljoverket --from 2026-09-20 --to 2026-09-23
+//	ingest arbetsmiljoverket [--feed inspection-notices] --from 2026-09-20 --to 2026-09-23
+//	ingest arbetsmiljoverket --feed recurring-inspection-failures --from 2026-09-20 --to 2026-09-23
 //
 // Both dates are inclusive civil dates. --to defaults to yesterday (the
-// diary never shows today's documents) and --from defaults to --to. Runs
-// are idempotent: repeating a window never duplicates events.
+// diary never shows today's documents) and --from defaults to --to. --feed
+// defaults to inspection notices, the original behaviour. Runs are
+// idempotent: repeating a window never duplicates events.
 package main
 
 import (
@@ -15,6 +17,7 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -37,16 +40,7 @@ func main() {
 }
 
 func run(args []string) error {
-	if len(args) < 1 || args[0] != "arbetsmiljoverket" {
-		return errors.New("usage: ingest arbetsmiljoverket [--from YYYY-MM-DD] [--to YYYY-MM-DD]")
-	}
-	fs := flag.NewFlagSet("arbetsmiljoverket", flag.ContinueOnError)
-	fromFlag := fs.String("from", "", "first document date, inclusive (default: --to)")
-	toFlag := fs.String("to", "", "last document date, inclusive (default: yesterday)")
-	if err := fs.Parse(args[1:]); err != nil {
-		return err
-	}
-	window, err := parseWindow(*fromFlag, *toFlag, time.Now())
+	feed, window, err := parseArgs(args, time.Now())
 	if err != nil {
 		return err
 	}
@@ -81,8 +75,8 @@ func run(args []string) error {
 		return err
 	}
 
-	logger.Info("ingestion started", "source", arbetsmiljoverket.Source, "from", window.From.Format(dateLayout), "to", window.To.Format(dateLayout))
-	stats, runErr := application.Arbetsmiljoverket.Run(ctx, window)
+	logger.Info("ingestion started", "source", arbetsmiljoverket.Source, "feed", feed.Name, "from", window.From.Format(dateLayout), "to", window.To.Format(dateLayout))
+	stats, runErr := application.Arbetsmiljoverket.RunFeed(ctx, feed, window)
 	if runErr != nil {
 		logger.Error("ingestion failed", append([]any{"error", runErr}, stats.LogAttrs()...)...)
 	} else {
@@ -90,10 +84,12 @@ func run(args []string) error {
 	}
 
 	fmt.Printf("source:                        %s\n", arbetsmiljoverket.Source)
+	fmt.Printf("feed:                          %s (%s)\n", feed.Name, feed.EventType)
 	fmt.Printf("window:                        %s .. %s\n", window.From.Format(dateLayout), window.To.Format(dateLayout))
 	fmt.Printf("pages processed:               %d\n", stats.Pages)
 	fmt.Printf("records observed:              %d\n", stats.RecordsObserved)
-	fmt.Printf("inspection notices identified: %d\n", stats.InspectionNotices)
+	fmt.Printf("records accepted:              %d\n", stats.RecordsAccepted)
+	fmt.Printf("records skipped (no match):    %d\n", stats.RecordsSkipped)
 	fmt.Printf("other document types skipped:  %d\n", stats.OtherDocumentTypes)
 	fmt.Printf("observations inserted:         %d\n", stats.ObservationsInserted)
 	fmt.Printf("events inserted:               %d\n", stats.EventsInserted)
@@ -104,6 +100,40 @@ func run(args []string) error {
 	fmt.Printf("invalid organisation numbers:  %d\n", stats.InvalidOrganisationNumbers)
 	fmt.Printf("invalid workplace CFARs:       %d\n", stats.InvalidWorkplaceCFARs)
 	return runErr
+}
+
+// usage is the one-line synopsis shown on argument errors.
+func usage() string {
+	names := make([]string, 0, 2)
+	for _, f := range arbetsmiljoverket.Feeds() {
+		names = append(names, f.Name)
+	}
+	return fmt.Sprintf("usage: ingest arbetsmiljoverket [--feed %s] [--from YYYY-MM-DD] [--to YYYY-MM-DD]", strings.Join(names, "|"))
+}
+
+// parseArgs resolves the command line to a feed and an inclusive window.
+// The feed defaults to inspection notices so existing invocations keep
+// their behaviour.
+func parseArgs(args []string, now time.Time) (arbetsmiljoverket.Feed, arbetsmiljoverket.Window, error) {
+	if len(args) < 1 || args[0] != "arbetsmiljoverket" {
+		return arbetsmiljoverket.Feed{}, arbetsmiljoverket.Window{}, errors.New(usage())
+	}
+	fs := flag.NewFlagSet("arbetsmiljoverket", flag.ContinueOnError)
+	feedFlag := fs.String("feed", arbetsmiljoverket.DefaultFeed.Name, "feed to ingest: inspection-notices or recurring-inspection-failures")
+	fromFlag := fs.String("from", "", "first document date, inclusive (default: --to)")
+	toFlag := fs.String("to", "", "last document date, inclusive (default: yesterday)")
+	if err := fs.Parse(args[1:]); err != nil {
+		return arbetsmiljoverket.Feed{}, arbetsmiljoverket.Window{}, err
+	}
+	feed, err := arbetsmiljoverket.FeedByName(*feedFlag)
+	if err != nil {
+		return arbetsmiljoverket.Feed{}, arbetsmiljoverket.Window{}, fmt.Errorf("--feed: %w", err)
+	}
+	window, err := parseWindow(*fromFlag, *toFlag, now)
+	if err != nil {
+		return arbetsmiljoverket.Feed{}, arbetsmiljoverket.Window{}, err
+	}
+	return feed, window, nil
 }
 
 // parseWindow resolves the flags to an inclusive window. Dates are civil

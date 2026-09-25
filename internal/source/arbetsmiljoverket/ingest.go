@@ -20,8 +20,8 @@ import (
 // any sensible window, and stops a runaway loop if the source misbehaves.
 const DefaultMaxPages = 1000
 
-// Ingester fetches inspection notices for a date window and persists them
-// as source observations and public events.
+// Ingester fetches the documents of a feed for a date window and persists
+// them as source observations and public events.
 type Ingester struct {
 	client   *Client
 	repo     *publicevent.Repository
@@ -54,9 +54,15 @@ func (w Window) Validate() error {
 
 // Stats summarises one run.
 type Stats struct {
-	Pages                      int
-	RecordsObserved            int
-	InspectionNotices          int
+	Pages           int
+	RecordsObserved int
+	// RecordsAccepted are rows of the feed's document type that passed its
+	// acceptance rule and were persisted (or failed to persist).
+	RecordsAccepted int
+	// RecordsSkipped are rows of the right document type that the feed's
+	// acceptance rule rejected; they are logged and produce nothing.
+	RecordsSkipped int
+	// OtherDocumentTypes are rows the source returned despite the filter.
 	OtherDocumentTypes         int
 	ParseFailures              int
 	PersistFailures            int
@@ -73,7 +79,8 @@ func (s Stats) LogAttrs() []any {
 	return []any{
 		"pages", s.Pages,
 		"records_observed", s.RecordsObserved,
-		"inspection_notices", s.InspectionNotices,
+		"records_accepted", s.RecordsAccepted,
+		"records_skipped", s.RecordsSkipped,
 		"other_document_types", s.OtherDocumentTypes,
 		"parse_failures", s.ParseFailures,
 		"persist_failures", s.PersistFailures,
@@ -90,13 +97,22 @@ func (s Stats) LogAttrs() []any {
 // not be persisted; the rest of the run completed and the stats are valid.
 var ErrPersistFailures = errors.New("arbetsmiljoverket: some records could not be persisted")
 
-// Run ingests every Inspektionsmeddelande dated within w. It pages through
+// Run ingests the default feed (inspection notices) for w; see RunFeed.
+func (in *Ingester) Run(ctx context.Context, w Window) (Stats, error) {
+	return in.RunFeed(ctx, DefaultFeed, w)
+}
+
+// RunFeed ingests every document of feed dated within w. It pages through
 // the filtered search until the source reports no more rows. A transport,
 // status or page-level parse error aborts the run with the stats so far; a
-// malformed row or a failed persist is counted, logged and skipped.
-// Re-running over the same window is idempotent.
-func (in *Ingester) Run(ctx context.Context, w Window) (Stats, error) {
+// malformed row or a failed persist is counted, logged and skipped, and so
+// is a row the feed's acceptance rule rejects. Re-running over the same or
+// an overlapping window is idempotent.
+func (in *Ingester) RunFeed(ctx context.Context, feed Feed, w Window) (Stats, error) {
 	var stats Stats
+	if err := feed.validate(); err != nil {
+		return stats, err
+	}
 	if err := w.Validate(); err != nil {
 		return stats, err
 	}
@@ -104,15 +120,15 @@ func (in *Ingester) Run(ctx context.Context, w Window) (Stats, error) {
 	if maxPages < 1 {
 		maxPages = DefaultMaxPages
 	}
-	logger := in.logger.With("source", Source, "from", w.From.Format(dateLayout), "to", w.To.Format(dateLayout))
+	logger := in.logger.With("source", Source, "feed", feed.Name, "from", w.From.Format(dateLayout), "to", w.To.Format(dateLayout))
 
 	seen := 0
 	for page := 1; page <= maxPages; page++ {
 		sp, err := in.client.Search(ctx, SearchQuery{
 			From:         w.From,
 			To:           w.To,
-			SubjectArea:  SubjectAreaInspection,
-			DocumentType: DocumentTypeInspectionNotice,
+			SubjectArea:  feed.SubjectArea,
+			DocumentType: feed.DocumentType,
 			Page:         page,
 		})
 		if err != nil {
@@ -128,13 +144,20 @@ func (in *Ingester) Run(ctx context.Context, w Window) (Stats, error) {
 		}
 		for _, doc := range sp.Documents {
 			stats.RecordsObserved++
-			if doc.DocumentType != InspectionNoticeTypeName {
+			if doc.DocumentType != feed.DocumentTypeName {
 				stats.OtherDocumentTypes++
 				logger.Warn("source returned a document of another type despite the filter", "document_number", doc.DocumentNumber, "document_type", doc.DocumentType)
 				continue
 			}
-			stats.InspectionNotices++
-			if err := in.persist(ctx, doc, sp.URL, &stats); err != nil {
+			if ok, reason := feed.Accept(doc); !ok {
+				stats.RecordsSkipped++
+				logger.Info("source row does not match the feed's acceptance rule; skipped",
+					"document_number", doc.DocumentNumber, "document_type", doc.DocumentType, "origin", doc.Origin,
+					"case_title", doc.CaseTitle, "organisation_number", doc.OrganisationNumber, "reason", reason)
+				continue
+			}
+			stats.RecordsAccepted++
+			if err := in.persist(ctx, feed, doc, sp.URL, &stats); err != nil {
 				stats.PersistFailures++
 				logger.Error("record could not be persisted", "document_number", doc.DocumentNumber, "error", err)
 			}
@@ -146,7 +169,7 @@ func (in *Ingester) Run(ctx context.Context, w Window) (Stats, error) {
 	}
 
 	if stats.PersistFailures > 0 {
-		return stats, fmt.Errorf("%w: %d of %d", ErrPersistFailures, stats.PersistFailures, stats.InspectionNotices)
+		return stats, fmt.Errorf("%w: %d of %d", ErrPersistFailures, stats.PersistFailures, stats.RecordsAccepted)
 	}
 	return stats, nil
 }
@@ -154,8 +177,8 @@ func (in *Ingester) Run(ctx context.Context, w Window) (Stats, error) {
 // persist records the observation and derives the event in one
 // transaction, so an event never points at an observation that was not
 // committed.
-func (in *Ingester) persist(ctx context.Context, doc Document, pageURL string, stats *Stats) error {
-	ev, notes := ToEvent(doc)
+func (in *Ingester) persist(ctx context.Context, feed Feed, doc Document, pageURL string, stats *Stats) error {
+	ev, notes := ToEvent(doc, feed.EventType)
 	if notes.InvalidOrganisationNumber {
 		stats.InvalidOrganisationNumbers++
 		in.logger.Warn("organisation number failed validation; stored without organisation identity", "document_number", doc.DocumentNumber)
@@ -207,18 +230,18 @@ var cfarPattern = regexp.MustCompile(`^\d{8}$`)
 // few rows, as CFAR) when it has none.
 const workplaceMissing = "saknas"
 
-// ToEvent maps a document to the canonical event. The observation ID is
-// left for the caller. Values that fail validation are dropped (never
-// guessed) and reported in the notes; they remain in the observation
-// payload.
-func ToEvent(doc Document) (publicevent.NewEvent, MappingNotes) {
+// ToEvent maps a document to the canonical event of the given type. The
+// title is the source's case title, verbatim. The observation ID is left
+// for the caller. Values that fail validation are dropped (never guessed)
+// and reported in the notes; they remain in the observation payload.
+func ToEvent(doc Document, eventType publicevent.EventType) (publicevent.NewEvent, MappingNotes) {
 	var notes MappingNotes
 	occurredOn, _ := time.Parse(dateLayout, doc.DocumentDate) // validated by the parser
 
 	ev := publicevent.NewEvent{
 		Source:           Source,
 		SourceEventID:    doc.DocumentNumber,
-		EventType:        publicevent.EventTypeWorkEnvironmentInspectionNotice,
+		EventType:        eventType,
 		OccurredOn:       occurredOn,
 		Title:            doc.CaseTitle,
 		OrganisationName: doc.OrganisationName,

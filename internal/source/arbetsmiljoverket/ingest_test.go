@@ -101,7 +101,7 @@ func TestIngest_PersistsObservationsAndEventsIdempotently(t *testing.T) {
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
-	want := arbetsmiljoverket.Stats{Pages: 2, RecordsObserved: 3, InspectionNotices: 3, ObservationsInserted: 3, EventsInserted: 3}
+	want := arbetsmiljoverket.Stats{Pages: 2, RecordsObserved: 3, RecordsAccepted: 3, ObservationsInserted: 3, EventsInserted: 3}
 	if stats != want {
 		t.Errorf("stats = %+v\nwant   %+v", stats, want)
 	}
@@ -143,7 +143,7 @@ func TestIngest_PersistsObservationsAndEventsIdempotently(t *testing.T) {
 	if err != nil {
 		t.Fatalf("second run: %v", err)
 	}
-	want = arbetsmiljoverket.Stats{Pages: 2, RecordsObserved: 3, InspectionNotices: 3, EventsUnchanged: 3}
+	want = arbetsmiljoverket.Stats{Pages: 2, RecordsObserved: 3, RecordsAccepted: 3, EventsUnchanged: 3}
 	if stats != want {
 		t.Errorf("second run stats = %+v\nwant   %+v", stats, want)
 	}
@@ -174,7 +174,7 @@ func TestIngest_PersistsObservationsAndEventsIdempotently(t *testing.T) {
 	if err != nil {
 		t.Fatalf("third run: %v", err)
 	}
-	want = arbetsmiljoverket.Stats{Pages: 2, RecordsObserved: 3, InspectionNotices: 3, ObservationsInserted: 1, EventsUpdated: 1, EventsUnchanged: 2}
+	want = arbetsmiljoverket.Stats{Pages: 2, RecordsObserved: 3, RecordsAccepted: 3, ObservationsInserted: 1, EventsUpdated: 1, EventsUnchanged: 2}
 	if stats != want {
 		t.Errorf("third run stats = %+v\nwant   %+v", stats, want)
 	}
@@ -206,7 +206,7 @@ func TestIngest_SkipsMalformedRowsAndOtherTypes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
-	want := arbetsmiljoverket.Stats{Pages: 2, RecordsObserved: 2, InspectionNotices: 1, OtherDocumentTypes: 1, ParseFailures: 2, ObservationsInserted: 1, EventsInserted: 1}
+	want := arbetsmiljoverket.Stats{Pages: 2, RecordsObserved: 2, RecordsAccepted: 1, OtherDocumentTypes: 1, ParseFailures: 2, ObservationsInserted: 1, EventsInserted: 1}
 	if stats != want {
 		t.Errorf("stats = %+v\nwant   %+v", stats, want)
 	}
@@ -254,5 +254,190 @@ func TestIngest_RejectsInvalidWindow(t *testing.T) {
 	}
 	if _, err := app.Arbetsmiljoverket.Run(context.Background(), arbetsmiljoverket.Window{}); err == nil {
 		t.Fatal("expected error for empty window")
+	}
+}
+
+// certificateWindow is any window: the fake diary ignores dates.
+func certificateWindow(t *testing.T, from, to string) arbetsmiljoverket.Window {
+	t.Helper()
+	f, _ := time.Parse("2006-01-02", from)
+	u, _ := time.Parse("2006-01-02", to)
+	return arbetsmiljoverket.Window{From: f, To: u}
+}
+
+func TestIngest_RecurringInspectionFailures(t *testing.T) {
+	diary := &fakeDiary{body: readFixture(t, "search_page_certificates.html"), empty: readFixture(t, "search_page_empty.html")}
+	server := httptest.NewServer(diary)
+	defer server.Close()
+	app := testutil.NewApp(t, testutil.WithConfig(func(cfg *config.Config) {
+		cfg.Sources.Arbetsmiljoverket.BaseURL = server.URL
+	}))
+	repo := publicevent.NewRepository()
+	ctx := context.Background()
+	feed := arbetsmiljoverket.FeedRecurringInspectionFailures
+
+	// The fixture is one real 6.1-49 page: two failed-inspection
+	// certificates (a vehicle lift and a compressed-air receiver), an
+	// approved inspection sent for information, a certificate filed in an
+	// inspection-campaign case, and a Tillsynsmeddelande returned despite
+	// the filter. Only the two failures become events.
+	stats, err := app.Arbetsmiljoverket.RunFeed(ctx, feed, certificateWindow(t, "2026-09-01", "2026-09-10"))
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	want := arbetsmiljoverket.Stats{Pages: 1, RecordsObserved: 5, RecordsAccepted: 2, RecordsSkipped: 2, OtherDocumentTypes: 1, ObservationsInserted: 2, EventsInserted: 2}
+	if stats != want {
+		t.Errorf("stats = %+v\nwant   %+v", stats, want)
+	}
+	if n := countRows(t, app, "public_events"); n != 2 {
+		t.Errorf("public_events = %d", n)
+	}
+	if n := countRows(t, app, "source_observations"); n != 2 {
+		t.Errorf("source_observations = %d (skipped rows must not be observed)", n)
+	}
+
+	page, err := repo.List(ctx, app.Pool, publicevent.Filter{EventType: publicevent.EventTypeWorkEquipmentInspectionFailed}, 10, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	byID := map[string]publicevent.PublicEvent{}
+	for _, e := range page.Items {
+		byID[e.SourceEventID] = e
+	}
+	lift, ok := byID["2026/059517-1"]
+	if !ok || lift.Source != "arbetsmiljoverket" || lift.EventType != publicevent.EventTypeWorkEquipmentInspectionFailed ||
+		lift.OccurredOn.Format("2006-01-02") != "2026-09-16" || lift.Title != "Återkommande besiktning - fordonslyft flerpelarlyft" ||
+		lift.OrganisationNumber != "5569620726" || lift.OrganisationName != "HELSINGE DÄCKCENTER AB" ||
+		lift.WorkplaceCFAR != "54274840" || lift.WorkplaceName != "HELSINGE DÄCKCENTER AB" ||
+		!strings.HasPrefix(lift.SourceURL, server.URL+"/") || !strings.Contains(lift.SourceURL, "Case/?id=2026/059517") ||
+		recordField(t, lift.Record, "document_type") != "Intyg återkommande besiktning" || recordField(t, lift.Record, "origin") != "Inkommande" ||
+		recordField(t, lift.Record, "case_title") != lift.Title {
+		t.Errorf("vehicle lift event = %+v", lift)
+	}
+	pressure, ok := byID["2026/049128-1"]
+	if !ok || pressure.EventType != publicevent.EventTypeWorkEquipmentInspectionFailed ||
+		pressure.OccurredOn.Format("2006-01-02") != "2026-08-06" || pressure.Title != "Återkommande besiktning - Tryckluftbehållare" ||
+		pressure.OrganisationNumber != "5591630883" || pressure.WorkplaceCFAR != "60365152" {
+		t.Errorf("pressure event = %+v", pressure)
+	}
+	for _, skipped := range []string{"2026/006641-1", "2026/057530-2", "2026/060618-2"} {
+		if _, exists := byID[skipped]; exists {
+			t.Errorf("%s must not become an event", skipped)
+		}
+		if obs, _ := repo.ListObservations(ctx, app.Pool, arbetsmiljoverket.Source, skipped); len(obs) != 0 {
+			t.Errorf("%s must not be observed: %+v", skipped, obs)
+		}
+	}
+	obs, err := repo.ListObservations(ctx, app.Pool, arbetsmiljoverket.Source, "2026/059517-1")
+	if err != nil || len(obs) != 1 || obs[0].ID != lift.ObservationID || !strings.Contains(obs[0].Raw, "2026/059517-1") {
+		t.Fatalf("observations = %+v, %v", obs, err)
+	}
+	logs := app.Logs()
+	if !strings.Contains(logs, "godkänd besiktning") || !strings.Contains(logs, "does not match the feed") ||
+		!strings.Contains(logs, "2026/057530-2") || !strings.Contains(logs, "another type despite the filter") ||
+		strings.Contains(logs, "could not be parsed") {
+		t.Errorf("expected skip and guard logs, no parse failures:\n%s", logs)
+	}
+
+	// Overlapping window: the same certificates again, no duplicates.
+	stats, err = app.Arbetsmiljoverket.RunFeed(ctx, feed, certificateWindow(t, "2026-09-05", "2026-09-15"))
+	if err != nil {
+		t.Fatalf("second run: %v", err)
+	}
+	want = arbetsmiljoverket.Stats{Pages: 1, RecordsObserved: 5, RecordsAccepted: 2, RecordsSkipped: 2, OtherDocumentTypes: 1, EventsUnchanged: 2}
+	if stats != want {
+		t.Errorf("second run stats = %+v\nwant   %+v", stats, want)
+	}
+	if countRows(t, app, "public_events") != 2 || countRows(t, app, "source_observations") != 2 {
+		t.Errorf("re-run changed row counts: events %d, observations %d", countRows(t, app, "public_events"), countRows(t, app, "source_observations"))
+	}
+	unchanged, _ := repo.Get(ctx, app.Pool, lift.ID)
+	if !unchanged.UpdatedAt.Equal(lift.UpdatedAt) {
+		t.Errorf("unchanged event was touched: %v -> %v", lift.UpdatedAt, unchanged.UpdatedAt)
+	}
+
+	// Changed source record: the vehicle-lift case is closed. A new
+	// observation is appended and the event follows it.
+	changed := strings.Replace(string(diary.body), "P&#229;g&#229;ende", "Avslutat", 1)
+	if changed == string(diary.body) {
+		t.Fatal("fixture did not contain the status to change")
+	}
+	diary.set([]byte(changed), 0)
+	stats, err = app.Arbetsmiljoverket.RunFeed(ctx, feed, certificateWindow(t, "2026-09-01", "2026-09-10"))
+	if err != nil {
+		t.Fatalf("third run: %v", err)
+	}
+	want = arbetsmiljoverket.Stats{Pages: 1, RecordsObserved: 5, RecordsAccepted: 2, RecordsSkipped: 2, OtherDocumentTypes: 1, ObservationsInserted: 1, EventsUpdated: 1, EventsUnchanged: 1}
+	if stats != want {
+		t.Errorf("third run stats = %+v\nwant   %+v", stats, want)
+	}
+	updated, _ := repo.Get(ctx, app.Pool, lift.ID)
+	obs, _ = repo.ListObservations(ctx, app.Pool, arbetsmiljoverket.Source, "2026/059517-1")
+	if len(obs) != 2 || updated.ObservationID != obs[1].ID || recordField(t, updated.Record, "case_status") != "Avslutat" ||
+		updated.Title != lift.Title || !updated.FirstObservedAt.Equal(lift.FirstObservedAt) || countRows(t, app, "public_events") != 2 {
+		t.Errorf("updated event = %+v, observations = %d", updated, len(obs))
+	}
+
+	// Invalid identifiers on the source: the event keeps its identity, the
+	// values are dropped from the event and kept in the payload.
+	broken := strings.ReplaceAll(changed, "5569620726", "5569620727") // fails the Luhn check
+	broken = strings.ReplaceAll(broken, "54274840", "5427484")        // seven digits
+	if broken == changed {
+		t.Fatal("fixture did not contain the identifiers to break")
+	}
+	diary.set([]byte(broken), 0)
+	stats, err = app.Arbetsmiljoverket.RunFeed(ctx, feed, certificateWindow(t, "2026-09-01", "2026-09-10"))
+	if err != nil {
+		t.Fatalf("fourth run: %v", err)
+	}
+	want = arbetsmiljoverket.Stats{Pages: 1, RecordsObserved: 5, RecordsAccepted: 2, RecordsSkipped: 2, OtherDocumentTypes: 1, ObservationsInserted: 1, EventsUpdated: 1, EventsUnchanged: 1, InvalidOrganisationNumbers: 1, InvalidWorkplaceCFARs: 1}
+	if stats != want {
+		t.Errorf("fourth run stats = %+v\nwant   %+v", stats, want)
+	}
+	invalid, _ := repo.Get(ctx, app.Pool, lift.ID)
+	if invalid.SourceEventID != "2026/059517-1" || invalid.OrganisationNumber != "" || invalid.WorkplaceCFAR != "" ||
+		invalid.OrganisationName != "HELSINGE DÄCKCENTER AB" || invalid.EventType != publicevent.EventTypeWorkEquipmentInspectionFailed ||
+		recordField(t, invalid.Record, "organisation_number") != "5569620727" || recordField(t, invalid.Record, "workplace_cfar") != "5427484" {
+		t.Errorf("event after invalid identifiers = %+v", invalid)
+	}
+	if countRows(t, app, "public_events") != 2 {
+		t.Errorf("public_events = %d", countRows(t, app, "public_events"))
+	}
+	if logs := app.Logs(); !strings.Contains(logs, "organisation number failed validation") || !strings.Contains(logs, "workplace CFAR failed validation") {
+		t.Errorf("expected validation warnings:\n%s", logs)
+	}
+}
+
+func TestIngest_InspectionNoticeFeedIsTheDefault(t *testing.T) {
+	diary := &fakeDiary{body: readFixture(t, "search_page.html"), empty: readFixture(t, "search_page_empty.html")}
+	server := httptest.NewServer(diary)
+	defer server.Close()
+	app := testutil.NewApp(t, testutil.WithConfig(func(cfg *config.Config) {
+		cfg.Sources.Arbetsmiljoverket.BaseURL = server.URL
+	}))
+	ctx := context.Background()
+
+	stats, err := app.Arbetsmiljoverket.RunFeed(ctx, arbetsmiljoverket.FeedInspectionNotices, window(t))
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	want := arbetsmiljoverket.Stats{Pages: 2, RecordsObserved: 3, RecordsAccepted: 3, ObservationsInserted: 3, EventsInserted: 3}
+	if stats != want {
+		t.Errorf("stats = %+v\nwant   %+v", stats, want)
+	}
+	// Run (no feed) is the same feed: nothing new.
+	stats, err = app.Arbetsmiljoverket.Run(ctx, window(t))
+	if err != nil || stats.EventsUnchanged != 3 || stats.EventsInserted != 0 {
+		t.Errorf("Run after RunFeed(inspection notices) = %+v, %v", stats, err)
+	}
+	page, err := publicevent.NewRepository().List(ctx, app.Pool, publicevent.Filter{EventType: publicevent.EventTypeWorkEnvironmentInspectionNotice}, 10, "")
+	if err != nil || len(page.Items) != 3 {
+		t.Errorf("inspection notices listed = %d, %v", len(page.Items), err)
+	}
+	if page, _ := publicevent.NewRepository().List(ctx, app.Pool, publicevent.Filter{EventType: publicevent.EventTypeWorkEquipmentInspectionFailed}, 10, ""); len(page.Items) != 0 {
+		t.Errorf("inspection notices must not appear as failed inspections: %d", len(page.Items))
+	}
+	if _, err := app.Arbetsmiljoverket.RunFeed(ctx, arbetsmiljoverket.Feed{Name: "half-configured"}, window(t)); err == nil {
+		t.Error("expected an error for an incomplete feed")
 	}
 }

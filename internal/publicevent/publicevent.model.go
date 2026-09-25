@@ -31,6 +31,11 @@ const (
 	// inspected a workplace, found deficiencies and issued a written notice
 	// to the employer.
 	EventTypeWorkEnvironmentInspectionNotice EventType = "WORK_ENVIRONMENT_INSPECTION_NOTICE"
+	// EventTypeWorkEquipmentInspectionFailed: an accredited inspection body
+	// inspected a piece of work equipment (a technical device), found it did
+	// not meet the required safety standard, and its certificate was
+	// registered by the work environment authority.
+	EventTypeWorkEquipmentInspectionFailed EventType = "WORK_EQUIPMENT_INSPECTION_FAILED"
 )
 
 // SourceObservation is one observed state of one source record.

@@ -29,6 +29,19 @@ back to the source. It contains no judgement about commercial value. An
 interpretation (an *assessment*) would be a separate record pointing at the
 event; none exists yet.
 
+Event types are neutral statements of what happened, independent of the
+source that reported it:
+
+| Event type | Meaning | Produced by |
+| --- | --- | --- |
+| `WORK_ENVIRONMENT_INSPECTION_NOTICE` | a work environment authority inspected a workplace, found deficiencies and issued a written notice | Arbetsmiljöverket feed `inspection-notices` |
+| `WORK_EQUIPMENT_INSPECTION_FAILED` | an accredited inspection body found a piece of work equipment did not meet the required safety standard and its certificate was registered by the authority | Arbetsmiljöverket feed `recurring-inspection-failures` |
+
+The title of an event is the source's own wording (for Arbetsmiljöverket
+the case title, e.g. "Återkommande besiktning - Fordonslyft
+flerpelarlyft"). Classifications derived from that wording, such as the
+kind of device, are interpretation and are not fields of the event.
+
 ## Observation semantics
 
 `source_observations` is append-only per observed state:
@@ -99,7 +112,9 @@ see the source's own words next to our canonical reading.
 ## Ingestion
 
 ```bash
-make ingest from=2026-09-20 to=2026-09-23   # go run ./cmd/ingest arbetsmiljoverket --from … --to …
+make ingest from=2026-09-20 to=2026-09-23                                     # inspection notices (default feed)
+make ingest feed=recurring-inspection-failures from=2026-09-20 to=2026-09-23  # failed recurring inspections
+# go run ./cmd/ingest arbetsmiljoverket [--feed inspection-notices|recurring-inspection-failures] --from … --to …
 ```
 
 There is no scheduler; the command is run by hand. Source specifics are in

@@ -93,10 +93,12 @@ make migration name=create_widgets # scaffold migrations/<timestamp>_create_widg
 ## 4b. Ingesting public events
 
 Signal Engine turns public records into public events. The first source is
-Arbetsmiljöverket's web diary (`docs/sources/arbetsmiljoverket.md`):
+Arbetsmiljöverket's web diary (`docs/sources/arbetsmiljoverket.md`), with
+two feeds: inspection notices and failed recurring inspections:
 
 ```bash
 make ingest from=2026-09-20 to=2026-09-23   # inclusive dates; defaults to yesterday
+make ingest feed=recurring-inspection-failures from=2026-09-20 to=2026-09-23
 curl -s -b cookies 'localhost:8080/v1/public-events?from=2026-09-20&limit=100'
 ```
 
@@ -156,7 +158,7 @@ cmd/
   api/            HTTP server (optionally with embedded worker)
   worker/         background job worker
   migrate/        goose migrations: up | down | status | version
-  ingest/         manual source ingestion: ingest arbetsmiljoverket --from --to
+  ingest/         manual source ingestion: ingest arbetsmiljoverket [--feed …] --from --to
 internal/
   app/            composition root: wires config, infrastructure, features, routes, jobs
   auth/           users, sessions, signup/login/logout, email verification, password reset
