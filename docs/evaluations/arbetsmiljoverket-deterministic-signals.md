@@ -26,14 +26,21 @@ The better signal was not on the task's list. Document type `6.1-49
 Intyg återkommande besiktning` is an **incoming inspection certificate
 from an accredited body**, and AFS 2023:11 13 kap. 13 § obliges the body
 to notify Arbetsmiljöverket only when "anordningen inte erbjuder
-betryggande säkerhet". Each of its 1,738 cases in twelve months therefore
-means one named device at one named workplace **failed its recurring
-inspection**, and the case title says which device ("Återkommande
-besiktning - Fordonslyft flerpelare"). Organisation number is present on
-97 %, CFAR on 93 %, the device family is machine-readable on 97 %, and
-the employer has not yet answered Arbetsmiljöverket's demand when the
-case appears. This is the "inspection performed → not approved → case
-appears" flow the task asked us to look for, and it exists.
+betryggande säkerhet". The type produced 1,738 cases in twelve months.
+43 of them carry other titles (inspection campaigns, asbestos and
+crusher notifications, two "För kännedom - godkänd besiktning" rows) and
+are filtered out by title; each of the remaining **1,695 cases titled
+"Återkommande besiktning - <device>"** means one named device at one
+named workplace **failed its recurring inspection**, and the title says
+which device ("Återkommande besiktning - Fordonslyft flerpelare"): 1,101
+lifting devices, 578 pressure devices, 16 other devices. Organisation
+number is present on 97 % of those cases and CFAR on 93 %. The
+regulatory case is still active when it appears: Arbetsmiljöverket's
+demand and the employer's answer follow in the weeks after (section 5).
+This is the "inspection performed → not approved → case appears" flow
+the task asked us to look for, and it exists. What the diary does not
+show is whether the employer has already chosen a repair supplier by
+then; that is a commercial-validation question, not a data question.
 
 Three recipes are worth building; two of them come from the certificate
 type, one from the sanction type. The rest of the sanction dataset is
@@ -46,7 +53,7 @@ specific-but-ambiguous (fall protection).
 | Set | Documents | Cases | Period | Notes |
 | --- | ---: | ---: | --- | --- |
 | `6.4-1 Avgiftsföreläggande` (sanction orders) | 1,385 | 1,294 | 2025-09-25..2026-09-24 | full population; 1,641 in 2024, 1,761 in 2025 |
-| `6.1-49 Intyg återkommande besiktning` (certificates) | 1,803 | 1,738 | same | full population; 1,706 in 2025 |
+| `6.1-49 Intyg återkommande besiktning` (certificates) | 1,803 | 1,738 | same | full population; 43 filtered out as non-certificate titles, 1,695 certificate-title cases; 1,706 in 2025 |
 | `6.1-55 Beslut om slutligt omedelbart förbud` (immediate prohibitions) | 887 | 810 | same | full population |
 | `6.1-33/35 förbud/föreläggande med vite` | 424 | 390 | same | full population |
 | `6.1-24 Tillsynsmeddelande` | 1,343 | 1,319 | 2026-06-25..2026-09-24 | three-month sample |
@@ -96,12 +103,19 @@ training: 5 000–20 000 kr per worker.
 
 ### 3b. Inspection certificates (`6.1-49`), one row per case
 
+Population: 1,738 cases in total; 43 have titles that are not
+certificate titles (inspection campaign names, asbestos and crusher
+notifications, two "För kännedom - godkänd besiktning" rows) and are
+filtered out before any failure reading; the deterministic claim applies
+to the 1,695 cases titled "Återkommande besiktning - <device>", which
+split into the three device families below.
+
 | Family | Cases | Per year | Specificity | Org.nr | CFAR | Workplace ≠ legal entity | Timing | Supplier | Incumbent risk | Verdict |
 | --- | ---: | ---: | --- | ---: | ---: | ---: | --- | --- | --- | --- |
-| LIFTING_EQUIPMENT_FAILED_INSPECTION | 1,101 | 1,100 | DETERMINISTIC | 97 % | 93 % | 32 % | EARLY/TIMELY | lifting-equipment service by device type, then re-inspection | MEDIUM (HIGH for rental majors) | STRONG |
-| PRESSURE_EQUIPMENT_FAILED_INSPECTION | 578 | 580 | DETERMINISTIC | 98 % | 93 % | 37 % | EARLY/TIMELY | compressor / boiler / kitchen-equipment service, then re-control | MEDIUM | STRONG |
+| LIFTING_EQUIPMENT_FAILED_INSPECTION | 1,101 | 1,100 | DETERMINISTIC | 97 % | 93 % | 32 % | TIMELY for remediation; supplier selection unknown | lifting-equipment service by device type, then re-inspection | MEDIUM (HIGH for rental majors) | STRONG |
+| PRESSURE_EQUIPMENT_FAILED_INSPECTION | 578 | 580 | DETERMINISTIC | 98 % | 93 % | 37 % | TIMELY for remediation; supplier selection unknown | compressor / boiler / kitchen-equipment service, then re-control | MEDIUM | STRONG |
 | OTHER_EQUIPMENT_FAILED_INSPECTION (ports, pallställ, stegar) | 16 | 16 | DETERMINISTIC | 94 % | 88 % | | | equipment service | | ignore |
-| Not a certificate title (inspection campaigns, "För kännedom - godkänd besiktning") | 43 | 43 | UNKNOWN | | | | | | filter out |
+| Not a certificate title (inspection campaigns, notifications, "För kännedom - godkänd besiktning"); not counted as failures | 43 | 43 | UNKNOWN | | | | | | filter out by title |
 
 Device mix, lifting: overhead cranes/hoists (traverskran, telfer,
 pelarsvängkran) 284, mobile elevating work platforms 277, vehicle lifts
@@ -165,7 +179,7 @@ AND device text matches (tryck|kompressor|receiver|reciver|panna|pannor|ång|gry
 ```
 
 578 cases in twelve months (regex above: 563; together the two regexes
-classify 97.5 % of certificate-titled cases, and no title matches both
+classify 97.5 % of the 1,695 certificate-title cases, and no title matches both
 except "kompressorrum lastkaj"). Same duty for boilers that may not be
 operated (10 kap. 41 §) and the general 13 kap. 13 § for the pressure
 devices inspected under chapter 13 (compressed-air receivers, cooking
@@ -175,16 +189,22 @@ boiler or kitchen-equipment service, then re-control.
 ### Recipe 3: sanction order for missing lifting or pressure inspection
 
 ```text
-SelectedArendeProcess = 6.4
-AND SelectedHandlingType = 6.4-1 (row heading "Avgiftsföreläggande")
-AND case title matches (lyftanordning|bakgavellyft|fordonslyft|personlyft|besiktning|arbetskorg|teknisk anordning|13 kap)
+IF   SelectedArendeProcess = 6.4
+AND  SelectedHandlingType = 6.4-1 (row heading "Avgiftsföreläggande")
+AND  case title matches (lyftanordning|bakgavellyft|fordonslyft|personlyft|besiktning|arbetskorg|teknisk anordning|13 kap)
 → LIFTING_EQUIPMENT_INSPECTION_SANCTION
-AND case title matches (trycksatt|tryckkärl|tryckluft|över- eller undertryck|10 kap\. 8)
+
+ELSE IF SelectedArendeProcess = 6.4
+AND  SelectedHandlingType = 6.4-1
+AND  case title matches (trycksatt|tryckkärl|tryckluft|över- eller undertryck|10 kap\. 8)
 → PRESSURE_EQUIPMENT_CONTROL_SANCTION
 ```
 
-452 cases in twelve months (the two title rules reproduce the family
-counts exactly: 232 and 220; evaluate the lifting rule first). Required action: have the device inspected
+The two branches are alternatives, evaluated in this order (a title that
+matched the lifting branch is never tested against the pressure branch;
+in the data no title matches both). Together they select 452 cases in
+twelve months and reproduce the family counts exactly: 232 lifting and
+220 pressure. Required action: have the device inspected
 or controlled by an accredited body (and stop using it until then), pay
 the fee. Purchase: an accredited inspection, which the employer by
 definition did not have, plus whatever service is needed to pass.
@@ -223,19 +243,25 @@ Consequences:
   campaign. At order time the employer has usually already been told in
   writing to arrange the inspection; 563 of the 1,294 sanction cases were accepted outright
   and 508 contested (section 9).
-* Recipes 1 and 2 (certificate) are the earliest public moment. The
-  employer holds the certificate from inspection day, so a supplier may
-  be called before the case is registered; but the case shows the demand
-  is still open: of 454 certificate cases opened April–June 2026
-  (case pages read on 2026-09-25), 373 (82 %) got a Tillsynsmeddelande
-  from Arbetsmiljöverket a median 6 days after the certificate (75th
-  percentile 13 days), 301 (66 %) contain the employer's "Svar på
-  kravskrivelse", 151 (33 %) needed a reminder, 356 (78 %) were closed a
-  median 39 days after the certificate, and 33 (7 %) contain a second
-  certificate from the re-inspection. The corrective purchase therefore
-  happens in the weeks after the case appears, which is TIMELY; whether it
-  is EARLY depends on the unmeasured lag between inspection day and
-  registration.
+* Recipes 1 and 2 (certificate) are the earliest public moment in the
+  diary for that device. The chronology shows the **regulatory
+  remediation window** is still open when the case appears: of 454
+  certificate cases opened April–June 2026 (case pages read on
+  2026-09-25), 373 (82 %) got a Tillsynsmeddelande from Arbetsmiljöverket
+  a median 6 days after the certificate (75th percentile 13 days), 301
+  (66 %) contain the employer's "Svar på kravskrivelse", 151 (33 %)
+  needed a reminder, 356 (78 %) were closed a median 39 days after the
+  certificate, and 33 (7 %) contain a second certificate from the
+  re-inspection. The certificate is therefore TIMELY with respect to
+  remediation: the case commonly remains active for several weeks after
+  it appears. It does **not** show whether **supplier selection** is
+  still open. The employer holds the certificate from inspection day and
+  may already have an incumbent service provider, may have contacted a
+  repair company immediately after the failed inspection, or may have
+  been referred to one by the inspection body; the lag between
+  inspection day and registration is also not visible. Vendor-selection
+  timing is therefore not established by the diary data and remains a
+  commercial-validation question (section 14).
 * For fall protection the earliest signal is the immediate prohibition
   (Recipe 3c), not the sanction, and it carries the site address.
 
@@ -356,10 +382,10 @@ administrative court, the rest were still open.
 
 | Property | Inspection notices (`6.1-23`) | Deterministic certificate and sanction cases |
 | --- | --- | --- |
-| Volume | ~9,000 a year (35–40 per weekday) | ~1,700 certificates + ~450 lifting/pressure sanctions + ~110 forklift sanctions a year; ~450 fall-risk prohibitions |
+| Volume | ~9,000 a year (35–40 per weekday) | ~1,700 certificate-title cases + ~450 lifting/pressure sanctions + ~110 forklift sanctions a year; ~450 fall-risk prohibitions |
 | Specificity | campaign name only | device type (certificates) or exact regulatory offence (sanctions) |
 | Metadata sufficiency | document required for the deficiency | metadata sufficient |
-| Timing | early (day of visit) but unspecific | certificates: earliest public moment for that device; sanctions: ~100 days after the visit |
+| Timing | early (day of visit) but unspecific | certificates: earliest public moment in the diary for that device, regulatory case active for weeks, supplier-selection timing unknown; sanctions: ~100 days after the visit |
 | Supplier mapping | weak (campaign → broad category) | strong (device → service type; offence → inspection or training) |
 | Incumbent risk | unknown | medium; high for rental majors |
 | Identity | 96 % org.nr, 99 % CFAR | 97 % / 93 % (certificates), 88 % / 100 % (sanctions) |
@@ -389,8 +415,9 @@ Found by reading the full title vocabulary of the enforcement types:
 
 ## 12. Existing adapter fit (Phase 9)
 
-`internal/source/arbetsmiljoverket` can carry these recipes with
-configuration and classification, not a new adapter:
+`internal/source/arbetsmiljoverket` can carry these feeds with
+configuration, not a new adapter; the recipe classification lives
+outside the adapter and the event (see the fourth bullet):
 
 * `Client.SearchURL` already takes `SubjectArea` and `DocumentType` per
   query; `Ingester.Run` hard-codes `6.1`/`6.1-23` and rejects other
@@ -400,39 +427,56 @@ configuration and classification, not a new adapter:
   and sanction rows have the same markup and fields (verified on 3,661
   rows).
 * Event identity stays the document number (`2026/059517-1`); the
-  certificate cases have one incoming document each (96 % of cases), so
-  one event per failed inspection.
+  certificate-title cases have one incoming document each (96 % of
+  cases), so one event per failed inspection.
 * Two new event types in `publicevent` (for example
   `WORK_EQUIPMENT_INSPECTION_FAILED` and `WORK_ENVIRONMENT_SANCTION_ORDER`)
   and their addition to the API's `event_type` enum.
-* The deterministic classification (device family or deficiency family)
-  is a title regex evaluated at ingest time. The current `public_events`
-  row has no field for it; either a source-specific attribute on the
-  event or a query-time title filter. This is the one design decision
-  to make before implementing.
+* The title-derived classification (lifting, pressure, vehicle lift,
+  compressor, boiler, …) stays **outside** the canonical event, per
+  `docs/public-events.md` ("Source truth versus interpretation"): the
+  public event carries a neutral event type such as
+  `WORK_EQUIPMENT_INSPECTION_FAILED`, a title that keeps the
+  source-described device text ("Återkommande besiktning - Fordonslyft
+  flerpelare"), organisation, workplace and provenance; the original
+  Arbetsmiljöverket fields (document type, origin, subject area, case
+  title, case status) stay in the source observation payload. No
+  source-specific `equipment_family` or `deficiency_family` field is
+  added to `public_events`. The device family can later live in recipe
+  matching, in an assessment layer, or in another explicitly
+  source-independent classification model once such a model exists; none
+  of that is introduced by this evaluation.
 * Volume is trivial: certificates and sanction orders together are
   about 3,200 documents a year, i.e. one page of ten rows per weekday.
 
 ## 13. Recommendation for implementation: IMPLEMENT_NOW (Recipes 1 and 2), BACKLOG (Recipe 3 and forklift)
 
-Not implemented in this spike, per the task. Minimum plan:
+Not implemented in this spike, per the task. The recommendation rests
+on volume, buyer identity, metadata sufficiency and the open regulatory
+window; it does not assume that supplier selection is still open when
+the case appears (section 5), which must be validated commercially
+before the feed is sold as a lead source. Minimum plan:
 
 1. Add a second feed to the Arbetsmiljöverket ingester: subject area
    `6.1`, document type `6.1-49`, expected heading `Intyg återkommande
    besiktning`, origin `Inkommande`, title prefix `Återkommande
    besiktning`; skip rows that fail the heading or prefix check (the 43
    non-certificate cases).
-2. Map to a new event type, keep the device text from the title as the
-   event title, and classify the device family with the two regexes in
-   section 4 at ingest time; store the family where the event model
-   allows (decision in section 12).
+2. Map to a neutral event type (`WORK_EQUIPMENT_INSPECTION_FAILED`),
+   keep the source case title as the event title so the device text is
+   visible, and leave the original fields in the observation payload.
+   Do not store a device family on the event: the two regexes in
+   section 4 are recipe rules for a later matching or assessment layer,
+   and in this step they serve only the scope check and the tests.
 3. Extend `cmd/ingest` with the feed choice and the API enum with the
-   event type; tests for the classifier boundaries (lifting vs pressure
-   vs other vs non-certificate), for idempotent re-runs, and a fixture
-   built from real certificate rows.
+   event type; tests for the scope check (certificate title vs the 43
+   other titles), for idempotent re-runs, and a fixture built from real
+   certificate rows. The lifting/pressure/other boundaries of section 4
+   are tested wherever the recipe layer is built, not in the adapter.
 4. Leave Recipe 3 as a documented backlog item: same feed mechanism with
-   `6.4`/`6.4-1`, title classifier from `classify_sanction` rules, and
-   the LATE timing stated on the event.
+   `6.4`/`6.4-1` and a neutral sanction-order event type; the title
+   rules of section 4 and the LATE timing stay in the recipe
+   documentation, not on the event.
 
 ## 14. Limitations
 
@@ -440,8 +484,16 @@ Not implemented in this spike, per the task. Minimum plan:
   Arbetsmiljöverket; the lag from inspection day is not visible, so
   "earliest public moment" is relative to the diary, not to the
   inspection.
-* Family classification is rule-based on titles; 43 certificate cases
-  and 22 sanction cases carry uninformative titles.
+* The diary shows the regulatory window (Tillsynsmeddelande, reply,
+  closure) but nothing about supplier selection: whether the employer
+  already has a service provider, called one on inspection day, or was
+  referred by the inspection body is unmeasured. The TIMELY label in
+  sections 3b and 5 refers to remediation only; vendor-selection timing
+  needs commercial validation (for example a call sample of employers or
+  service firms) before the certificate feed is treated as a lead source.
+* Family classification is rule-based on titles; 43 of the 1,738
+  certificate cases and 22 of the 1,294 sanction cases carry
+  uninformative titles and are excluded from the deterministic counts.
 * Organisation histories were sampled (85 cases), not exhaustive; the
   population-level certificate-to-sanction link used organisation
   number only, so workplaces without an organisation number are missed.
