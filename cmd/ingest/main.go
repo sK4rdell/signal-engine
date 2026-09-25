@@ -3,11 +3,14 @@
 //
 //	ingest arbetsmiljoverket [--feed inspection-notices] --from 2026-09-20 --to 2026-09-23
 //	ingest arbetsmiljoverket --feed recurring-inspection-failures --from 2026-09-20 --to 2026-09-23
+//	ingest stockholm --from 2026-09-20 --to 2026-09-23
 //
-// Both dates are inclusive civil dates. --to defaults to yesterday (the
-// diary never shows today's documents) and --from defaults to --to. --feed
-// defaults to inspection notices, the original behaviour. Runs are
-// idempotent: repeating a window never duplicates events.
+// Both dates are inclusive civil dates. --to defaults to yesterday and
+// --from defaults to --to. For Arbetsmiljöverket the window is the
+// document date and --feed defaults to inspection notices; for Stockholm
+// the window is the case start date, and known open cases due for a
+// refresh are re-read on every run. Runs are idempotent: repeating a
+// window never duplicates events.
 package main
 
 import (
@@ -28,9 +31,16 @@ import (
 	"github.com/sK4rdell/signal-engine/internal/platform/logging"
 	"github.com/sK4rdell/signal-engine/internal/platform/metrics"
 	"github.com/sK4rdell/signal-engine/internal/source/arbetsmiljoverket"
+	"github.com/sK4rdell/signal-engine/internal/source/stockholm"
 )
 
 const dateLayout = "2006-01-02"
+
+// Sources the command knows.
+const (
+	sourceArbetsmiljoverket = "arbetsmiljoverket"
+	sourceStockholm         = "stockholm"
+)
 
 func main() {
 	if err := run(os.Args[1:]); err != nil {
@@ -40,7 +50,7 @@ func main() {
 }
 
 func run(args []string) error {
-	feed, window, err := parseArgs(args, time.Now())
+	inv, err := parseArgs(args, time.Now())
 	if err != nil {
 		return err
 	}
@@ -75,32 +85,68 @@ func run(args []string) error {
 		return err
 	}
 
-	logger.Info("ingestion started", "source", arbetsmiljoverket.Source, "feed", feed.Name, "from", window.From.Format(dateLayout), "to", window.To.Format(dateLayout))
-	stats, runErr := application.Arbetsmiljoverket.RunFeed(ctx, feed, window)
-	if runErr != nil {
-		logger.Error("ingestion failed", append([]any{"error", runErr}, stats.LogAttrs()...)...)
-	} else {
-		logger.Info("ingestion finished", stats.LogAttrs()...)
+	from, to := inv.from.Format(dateLayout), inv.to.Format(dateLayout)
+	switch inv.source {
+	case sourceArbetsmiljoverket:
+		logger.Info("ingestion started", "source", arbetsmiljoverket.Source, "feed", inv.feed.Name, "from", from, "to", to)
+		stats, runErr := application.Arbetsmiljoverket.RunFeed(ctx, inv.feed, arbetsmiljoverket.Window{From: inv.from, To: inv.to})
+		if runErr != nil {
+			logger.Error("ingestion failed", append([]any{"error", runErr}, stats.LogAttrs()...)...)
+		} else {
+			logger.Info("ingestion finished", stats.LogAttrs()...)
+		}
+		fmt.Printf("source:                        %s\n", arbetsmiljoverket.Source)
+		fmt.Printf("feed:                          %s (%s)\n", inv.feed.Name, inv.feed.EventType)
+		fmt.Printf("window:                        %s .. %s\n", from, to)
+		fmt.Printf("pages processed:               %d\n", stats.Pages)
+		fmt.Printf("records observed:              %d\n", stats.RecordsObserved)
+		fmt.Printf("records accepted:              %d\n", stats.RecordsAccepted)
+		fmt.Printf("records skipped (no match):    %d\n", stats.RecordsSkipped)
+		fmt.Printf("records later in case:         %d\n", stats.RecordsLaterInCase)
+		fmt.Printf("other document types skipped:  %d\n", stats.OtherDocumentTypes)
+		fmt.Printf("observations inserted:         %d\n", stats.ObservationsInserted)
+		fmt.Printf("events inserted:               %d\n", stats.EventsInserted)
+		fmt.Printf("events updated:                %d\n", stats.EventsUpdated)
+		fmt.Printf("events already known:          %d\n", stats.EventsUnchanged)
+		fmt.Printf("parse failures:                %d\n", stats.ParseFailures)
+		fmt.Printf("persist failures:              %d\n", stats.PersistFailures)
+		fmt.Printf("invalid organisation numbers:  %d\n", stats.InvalidOrganisationNumbers)
+		fmt.Printf("invalid workplace CFARs:       %d\n", stats.InvalidWorkplaceCFARs)
+		return runErr
+	case sourceStockholm:
+		logger.Info("ingestion started", "source", stockholm.Source, "from", from, "to", to)
+		stats, runErr := application.Stockholm.Run(ctx, stockholm.Window{From: inv.from, To: inv.to})
+		if runErr != nil {
+			logger.Error("ingestion failed", append([]any{"error", runErr}, stats.LogAttrs()...)...)
+		} else {
+			logger.Info("ingestion finished", stats.LogAttrs()...)
+		}
+		fmt.Printf("source:                        %s\n", stockholm.Source)
+		fmt.Printf("window (case start):           %s .. %s\n", from, to)
+		fmt.Printf("search cases discovered:       %d\n", stats.SearchCasesDiscovered)
+		fmt.Printf("new cases fetched:             %d\n", stats.NewCasesFetched)
+		fmt.Printf("open cases refreshed:          %d\n", stats.OpenCasesRefreshed)
+		fmt.Printf("case pages fetched:            %d\n", stats.CasePagesFetched)
+		fmt.Printf("source records observed:       %d\n", stats.RecordsObserved)
+		fmt.Printf("observations inserted:         %d\n", stats.ObservationsInserted)
+		fmt.Printf("failed certificates found:     %d\n", stats.FailedCertificates)
+		fmt.Printf("documents excluded:            %d\n", stats.DocumentsExcluded)
+		fmt.Printf("duplicate certificates:        %d\n", stats.DuplicateCertificates)
+		fmt.Printf("events inserted:               %d\n", stats.EventsInserted)
+		fmt.Printf("events updated:                %d\n", stats.EventsUpdated)
+		fmt.Printf("events already known:          %d\n", stats.EventsUnchanged)
+		fmt.Printf("persist failures:              %d\n", stats.PersistFailures)
+		return runErr
 	}
+	return errors.New(usage())
+}
 
-	fmt.Printf("source:                        %s\n", arbetsmiljoverket.Source)
-	fmt.Printf("feed:                          %s (%s)\n", feed.Name, feed.EventType)
-	fmt.Printf("window:                        %s .. %s\n", window.From.Format(dateLayout), window.To.Format(dateLayout))
-	fmt.Printf("pages processed:               %d\n", stats.Pages)
-	fmt.Printf("records observed:              %d\n", stats.RecordsObserved)
-	fmt.Printf("records accepted:              %d\n", stats.RecordsAccepted)
-	fmt.Printf("records skipped (no match):    %d\n", stats.RecordsSkipped)
-	fmt.Printf("records later in case:         %d\n", stats.RecordsLaterInCase)
-	fmt.Printf("other document types skipped:  %d\n", stats.OtherDocumentTypes)
-	fmt.Printf("observations inserted:         %d\n", stats.ObservationsInserted)
-	fmt.Printf("events inserted:               %d\n", stats.EventsInserted)
-	fmt.Printf("events updated:                %d\n", stats.EventsUpdated)
-	fmt.Printf("events already known:          %d\n", stats.EventsUnchanged)
-	fmt.Printf("parse failures:                %d\n", stats.ParseFailures)
-	fmt.Printf("persist failures:              %d\n", stats.PersistFailures)
-	fmt.Printf("invalid organisation numbers:  %d\n", stats.InvalidOrganisationNumbers)
-	fmt.Printf("invalid workplace CFARs:       %d\n", stats.InvalidWorkplaceCFARs)
-	return runErr
+// invocation is a parsed command line.
+type invocation struct {
+	source string
+	// feed is set for Arbetsmiljöverket only.
+	feed     arbetsmiljoverket.Feed
+	from, to time.Time
 }
 
 // usage is the one-line synopsis shown on argument errors.
@@ -109,59 +155,70 @@ func usage() string {
 	for _, f := range arbetsmiljoverket.Feeds() {
 		names = append(names, f.Name)
 	}
-	return fmt.Sprintf("usage: ingest arbetsmiljoverket [--feed %s] [--from YYYY-MM-DD] [--to YYYY-MM-DD]", strings.Join(names, "|"))
+	return fmt.Sprintf("usage: ingest arbetsmiljoverket [--feed %s] [--from YYYY-MM-DD] [--to YYYY-MM-DD] | ingest stockholm [--from YYYY-MM-DD] [--to YYYY-MM-DD]", strings.Join(names, "|"))
 }
 
-// parseArgs resolves the command line to a feed and an inclusive window.
-// The feed defaults to inspection notices so existing invocations keep
-// their behaviour.
-func parseArgs(args []string, now time.Time) (arbetsmiljoverket.Feed, arbetsmiljoverket.Window, error) {
-	if len(args) < 1 || args[0] != "arbetsmiljoverket" {
-		return arbetsmiljoverket.Feed{}, arbetsmiljoverket.Window{}, errors.New(usage())
+// parseArgs resolves the command line. The Arbetsmiljöverket feed defaults
+// to inspection notices so existing invocations keep their behaviour.
+func parseArgs(args []string, now time.Time) (invocation, error) {
+	if len(args) < 1 {
+		return invocation{}, errors.New(usage())
 	}
-	fs := flag.NewFlagSet("arbetsmiljoverket", flag.ContinueOnError)
-	feedFlag := fs.String("feed", arbetsmiljoverket.DefaultFeed.Name, "feed to ingest: inspection-notices or recurring-inspection-failures")
-	fromFlag := fs.String("from", "", "first document date, inclusive (default: --to)")
-	toFlag := fs.String("to", "", "last document date, inclusive (default: yesterday)")
+	inv := invocation{source: args[0]}
+	fs := flag.NewFlagSet(inv.source, flag.ContinueOnError)
+	var feedFlag *string
+	switch inv.source {
+	case sourceArbetsmiljoverket:
+		feedFlag = fs.String("feed", arbetsmiljoverket.DefaultFeed.Name, "feed to ingest: inspection-notices or recurring-inspection-failures")
+	case sourceStockholm:
+	default:
+		return invocation{}, errors.New(usage())
+	}
+	fromFlag := fs.String("from", "", "first date, inclusive (default: --to)")
+	toFlag := fs.String("to", "", "last date, inclusive (default: yesterday)")
 	if err := fs.Parse(args[1:]); err != nil {
-		return arbetsmiljoverket.Feed{}, arbetsmiljoverket.Window{}, err
+		return invocation{}, err
 	}
-	feed, err := arbetsmiljoverket.FeedByName(*feedFlag)
+	if feedFlag != nil {
+		feed, err := arbetsmiljoverket.FeedByName(*feedFlag)
+		if err != nil {
+			return invocation{}, fmt.Errorf("--feed: %w", err)
+		}
+		inv.feed = feed
+	}
+	from, to, err := parseWindow(*fromFlag, *toFlag, now)
 	if err != nil {
-		return arbetsmiljoverket.Feed{}, arbetsmiljoverket.Window{}, fmt.Errorf("--feed: %w", err)
+		return invocation{}, err
 	}
-	window, err := parseWindow(*fromFlag, *toFlag, now)
-	if err != nil {
-		return arbetsmiljoverket.Feed{}, arbetsmiljoverket.Window{}, err
-	}
-	return feed, window, nil
+	inv.from, inv.to = from, to
+	return inv, nil
 }
 
 // parseWindow resolves the flags to an inclusive window. Dates are civil
-// dates in UTC; the diary itself is date-based.
-func parseWindow(from, to string, now time.Time) (arbetsmiljoverket.Window, error) {
-	var w arbetsmiljoverket.Window
+// dates in UTC; the sources are date-based.
+func parseWindow(from, to string, now time.Time) (time.Time, time.Time, error) {
+	var f, t time.Time
 	if to == "" {
 		y, m, d := now.UTC().AddDate(0, 0, -1).Date()
-		w.To = time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
+		t = time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
 	} else {
-		t, err := time.Parse(dateLayout, to)
+		parsed, err := time.Parse(dateLayout, to)
 		if err != nil {
-			return w, fmt.Errorf("--to: %q is not a date formatted like 2026-09-23", to)
+			return f, t, fmt.Errorf("--to: %q is not a date formatted like 2026-09-23", to)
 		}
-		w.To = t
+		t = parsed
 	}
 	if from == "" {
-		w.From = w.To
+		f = t
 	} else {
-		t, err := time.Parse(dateLayout, from)
+		parsed, err := time.Parse(dateLayout, from)
 		if err != nil {
-			return w, fmt.Errorf("--from: %q is not a date formatted like 2026-09-23", from)
+			return f, t, fmt.Errorf("--from: %q is not a date formatted like 2026-09-23", from)
 		}
-		w.From = t
+		f = parsed
 	}
-	if err := w.Validate(); err != nil {
-		return w, err
+	if t.Before(f) {
+		return f, t, errors.New("the window end is before its start")
 	}
-	return w, nil
+	return f, t, nil
 }

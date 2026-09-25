@@ -229,3 +229,113 @@ func TestPublicEvents_CursorPaginationIsDeterministic(t *testing.T) {
 		}
 	}
 }
+
+// seedProperty records an observation and derives a property event, the
+// way the Stockholm ingester does.
+func seedProperty(t *testing.T, app *testutil.App, id, occurredOn, designation, address, title string) publicevent.PublicEvent {
+	t.Helper()
+	ctx := context.Background()
+	repo := publicevent.NewRepository()
+	obs, _, err := repo.RecordObservation(ctx, app.Pool, publicevent.NewObservation{
+		Source:         publicevent.SourceStockholm,
+		SourceRecordID: strings.SplitN(id, ":", 2)[0],
+		SourceURL:      "https://etjanster.stockholm.se/Byggochplantjansten/arende/arende/" + strings.SplitN(id, ":", 2)[0] + "?dataSource=Active",
+		Payload:        map[string]string{"recno": strings.SplitN(id, ":", 2)[0], "district": "Östermalm", "closed_on": ""},
+		Raw:            "<html>" + id + "</html>",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	on, _ := time.Parse("2006-01-02", occurredOn)
+	e, _, err := repo.UpsertEvent(ctx, app.Pool, publicevent.NewEvent{
+		Source:                   publicevent.SourceStockholm,
+		SourceEventID:            id,
+		EventType:                publicevent.EventTypeMotorisedBuildingEquipmentInspectionFailed,
+		OccurredOn:               on,
+		Title:                    title,
+		PropertyMunicipalityCode: "0180",
+		PropertyDesignation:      designation,
+		PropertyAddress:          address,
+		SourceURL:                "https://etjanster.stockholm.se/Byggochplantjansten/arende/arende/" + strings.SplitN(id, ":", 2)[0] + "?dataSource=Active",
+		ObservationID:            obs.ID,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return e
+}
+
+func TestPublicEvents_PropertyEvents(t *testing.T) {
+	app := testutil.NewApp(t)
+	client := app.AuthenticatedClient(app.CreateUser())
+	ctx := context.Background()
+	repo := publicevent.NewRepository()
+
+	withAddress := seedProperty(t, app, "1327421:0f1e2d3c4b5a69788796a5b4c3d2e1f0", "2026-09-23", "Kronkvarnen 39", "Artillerigatan 48", "Intyg återkommande besiktning, ej godkänt, 53119")
+	withoutAddress := seedProperty(t, app, "1327431:1f1e2d3c4b5a69788796a5b4c3d2e1f0", "2026-09-22", "Riksby 1:47", "", "Intyg återkommande besiktning, ej godkänt, D1618461")
+	old := seed(t, app, seedEvent{id: "2026/060943-2", occurredOn: "2026-09-21", orgNr: "5594800418", orgName: "MITTEN MACK AB", cfar: "71466304", workplace: "MITTEN MACK AB", title: "Inspektion inom Fortlöpande tillsyn - Unga i arbetslivet", payloadState: "Pågående"})
+
+	if withAddress.PropertyMunicipalityCode != "0180" || withAddress.PropertyDesignation != "Kronkvarnen 39" || withAddress.PropertyAddress != "Artillerigatan 48" ||
+		withoutAddress.PropertyAddress != "" || withoutAddress.PropertyDesignation != "Riksby 1:47" || old.PropertyDesignation != "" || old.PropertyMunicipalityCode != "" {
+		t.Errorf("stored events = %+v, %+v, %+v", withAddress, withoutAddress, old)
+	}
+
+	var list publicevent.ListResponse
+	client.Get(base+"?source=stockholm&event_type=MOTORISED_BUILDING_EQUIPMENT_INSPECTION_FAILED").AssertStatus(t, http.StatusOK).DecodeJSON(t, &list)
+	if len(list.Items) != 2 {
+		t.Fatalf("list = %+v", list)
+	}
+	got := list.Items[0]
+	if got.ID != withAddress.ID || got.EventType != publicevent.EventTypeMotorisedBuildingEquipmentInspectionFailed || got.Organisation != nil || got.Workplace != nil ||
+		got.Property == nil || got.Property.MunicipalityCode != "0180" || got.Property.Designation != "Kronkvarnen 39" || got.Property.Address == nil || *got.Property.Address != "Artillerigatan 48" ||
+		got.Source.Name != "stockholm" || got.Source.SourceEventID != "1327421:0f1e2d3c4b5a69788796a5b4c3d2e1f0" || !strings.Contains(string(got.Source.Record), `"district":"Östermalm"`) {
+		t.Errorf("property item = %+v", got)
+	}
+	if got := list.Items[1]; got.Property == nil || got.Property.Address != nil || got.Property.Designation != "Riksby 1:47" {
+		t.Errorf("item without address = %+v", got)
+	}
+
+	// Raw JSON: property object with null address, null organisation and workplace.
+	res := client.Get(base+"/"+withoutAddress.ID.String()).AssertStatus(t, http.StatusOK)
+	for _, want := range []string{`"event_type":"MOTORISED_BUILDING_EQUIPMENT_INSPECTION_FAILED"`, `"organisation":null`, `"workplace":null`, `"property":{"municipality_code":"0180","designation":"Riksby 1:47","address":null}`, `"source":{"name":"stockholm"`} {
+		if !strings.Contains(string(res.Body), want) {
+			t.Errorf("body lacks %s:\n%s", want, res.Body)
+		}
+	}
+	res = client.Get(base+"/"+withAddress.ID.String()).AssertStatus(t, http.StatusOK)
+	if !strings.Contains(string(res.Body), `"property":{"municipality_code":"0180","designation":"Kronkvarnen 39","address":"Artillerigatan 48"}`) {
+		t.Errorf("body lacks property with address:\n%s", res.Body)
+	}
+	// Existing organisation/workplace events keep their shape with a null property.
+	res = client.Get(base+"/"+old.ID.String()).AssertStatus(t, http.StatusOK)
+	if !strings.Contains(string(res.Body), `"property":null`) || !strings.Contains(string(res.Body), `"organisation_number":"5594800418"`) {
+		t.Errorf("old event body:\n%s", res.Body)
+	}
+	if got := ids(t, client, base+"?source=arbetsmiljoverket"); len(got) != 1 {
+		t.Errorf("source filter = %v", got)
+	}
+
+	// Repository refuses half a property or an address without one.
+	obs, _ := repo.ListObservations(ctx, app.Pool, publicevent.SourceStockholm, "1327421")
+	for name, in := range map[string]publicevent.NewEvent{
+		"designation without municipality": {Source: "stockholm", SourceEventID: "x:1", EventType: publicevent.EventTypeMotorisedBuildingEquipmentInspectionFailed, OccurredOn: withAddress.OccurredOn, Title: "t", PropertyDesignation: "Aida 3", ObservationID: obs[0].ID},
+		"municipality without designation": {Source: "stockholm", SourceEventID: "x:2", EventType: publicevent.EventTypeMotorisedBuildingEquipmentInspectionFailed, OccurredOn: withAddress.OccurredOn, Title: "t", PropertyMunicipalityCode: "0180", ObservationID: obs[0].ID},
+		"address without property":         {Source: "stockholm", SourceEventID: "x:3", EventType: publicevent.EventTypeMotorisedBuildingEquipmentInspectionFailed, OccurredOn: withAddress.OccurredOn, Title: "t", PropertyAddress: "Gatan 1", ObservationID: obs[0].ID},
+	} {
+		if _, _, err := repo.UpsertEvent(ctx, app.Pool, in); err == nil {
+			t.Errorf("%s: expected an error", name)
+		}
+	}
+}
+
+// ids lists the source event ids a listing path returns.
+func ids(t *testing.T, client *testutil.Client, path string) []string {
+	t.Helper()
+	var list publicevent.ListResponse
+	client.Get(path).AssertStatus(t, http.StatusOK).DecodeJSON(t, &list)
+	out := make([]string, 0, len(list.Items))
+	for _, item := range list.Items {
+		out = append(out, item.Source.SourceEventID)
+	}
+	return out
+}

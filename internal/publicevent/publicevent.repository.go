@@ -107,7 +107,7 @@ func (r *Repository) ListObservations(ctx context.Context, db database.DBTX, sou
 
 // --- public events ---------------------------------------------------------
 
-const eventColumns = `id, source, source_event_id, event_type, occurred_on, title, organisation_number, organisation_name, workplace_cfar, workplace_name, source_url, observation_id, first_observed_at, created_at, updated_at`
+const eventColumns = `id, source, source_event_id, event_type, occurred_on, title, organisation_number, organisation_name, workplace_cfar, workplace_name, property_municipality_code, property_designation, property_address, source_url, observation_id, first_observed_at, created_at, updated_at`
 
 // eventColumnsOf prefixes every event column with a table alias for joins.
 func eventColumnsOf(alias string) string {
@@ -118,9 +118,9 @@ func eventColumnsOf(alias string) string {
 // the optional inserted flag, in that order.
 func scanEvent(row pgx.Row, withRecord bool, inserted *bool) (PublicEvent, error) {
 	var e PublicEvent
-	var orgNr, cfar *string
+	var orgNr, cfar, municipality, designation, address *string
 	var record []byte
-	dest := []any{&e.ID, &e.Source, &e.SourceEventID, &e.EventType, &e.OccurredOn, &e.Title, &orgNr, &e.OrganisationName, &cfar, &e.WorkplaceName, &e.SourceURL, &e.ObservationID, &e.FirstObservedAt, &e.CreatedAt, &e.UpdatedAt}
+	dest := []any{&e.ID, &e.Source, &e.SourceEventID, &e.EventType, &e.OccurredOn, &e.Title, &orgNr, &e.OrganisationName, &cfar, &e.WorkplaceName, &municipality, &designation, &address, &e.SourceURL, &e.ObservationID, &e.FirstObservedAt, &e.CreatedAt, &e.UpdatedAt}
 	if withRecord {
 		dest = append(dest, &record)
 	}
@@ -135,6 +135,15 @@ func scanEvent(row pgx.Row, withRecord bool, inserted *bool) (PublicEvent, error
 	}
 	if cfar != nil {
 		e.WorkplaceCFAR = *cfar
+	}
+	if municipality != nil {
+		e.PropertyMunicipalityCode = *municipality
+	}
+	if designation != nil {
+		e.PropertyDesignation = *designation
+	}
+	if address != nil {
+		e.PropertyAddress = *address
 	}
 	e.OccurredOn = e.OccurredOn.UTC()
 	if withRecord {
@@ -153,8 +162,9 @@ func nullIfEmpty(s string) *string {
 const upsertEventSQL = `
 	INSERT INTO public_events (id, source, source_event_id, event_type, occurred_on, title,
 	                           organisation_number, organisation_name, workplace_cfar, workplace_name,
+	                           property_municipality_code, property_designation, property_address,
 	                           source_url, observation_id)
-	VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+	VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 	ON CONFLICT ON CONSTRAINT public_events_source_event_key
 	DO UPDATE SET event_type = EXCLUDED.event_type,
 	              occurred_on = EXCLUDED.occurred_on,
@@ -163,6 +173,9 @@ const upsertEventSQL = `
 	              organisation_name = EXCLUDED.organisation_name,
 	              workplace_cfar = EXCLUDED.workplace_cfar,
 	              workplace_name = EXCLUDED.workplace_name,
+	              property_municipality_code = EXCLUDED.property_municipality_code,
+	              property_designation = EXCLUDED.property_designation,
+	              property_address = EXCLUDED.property_address,
 	              source_url = EXCLUDED.source_url,
 	              observation_id = EXCLUDED.observation_id,
 	              updated_at = now()
@@ -184,6 +197,9 @@ func (r *Repository) UpsertEvent(ctx context.Context, db database.DBTX, in NewEv
 	if in.Source == "" || in.SourceEventID == "" || in.EventType == "" || in.ObservationID == uuid.Nil || in.OccurredOn.IsZero() {
 		return PublicEvent{}, 0, errors.New("publicevent: event needs source, source event id, event type, observation and date")
 	}
+	if (in.PropertyMunicipalityCode == "") != (in.PropertyDesignation == "") || (in.PropertyAddress != "" && in.PropertyDesignation == "") {
+		return PublicEvent{}, 0, errors.New("publicevent: a property needs both municipality code and designation; an address needs a property")
+	}
 	id, err := uuid.NewV7()
 	if err != nil {
 		return PublicEvent{}, 0, fmt.Errorf("publicevent: generate id: %w", err)
@@ -192,6 +208,7 @@ func (r *Repository) UpsertEvent(ctx context.Context, db database.DBTX, in NewEv
 	e, err := scanEvent(db.QueryRow(ctx, upsertEventSQL,
 		id, in.Source, in.SourceEventID, string(in.EventType), in.OccurredOn, in.Title,
 		nullIfEmpty(in.OrganisationNumber), in.OrganisationName, nullIfEmpty(in.WorkplaceCFAR), in.WorkplaceName,
+		nullIfEmpty(in.PropertyMunicipalityCode), nullIfEmpty(in.PropertyDesignation), nullIfEmpty(in.PropertyAddress),
 		in.SourceURL, in.ObservationID,
 	), false, &inserted)
 	switch {

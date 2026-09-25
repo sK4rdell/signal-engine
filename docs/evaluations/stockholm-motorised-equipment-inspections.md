@@ -13,14 +13,32 @@ is our reading. The per-event sheet is
 `stockholm-motorised-equipment-inspections.csv`. Research scripts lived
 in a scratch directory and are not part of the repository.
 
+**Implementation status (2026-09-25):** implemented in the same pull
+request as `internal/source/stockholm`, event type
+`MOTORISED_BUILDING_EQUIPMENT_INSPECTION_FAILED`, operator documentation
+in [docs/sources/stockholm.md](../sources/stockholm.md). Sections 15 and
+16 below are the plan as written before implementation; three points
+were decided differently:
+
+* event identity is a hash of the certificate's stable metadata within
+  the case (RecNo, document timestamp, category, description), not the
+  ordinal of the certificate in the case's document list, because the
+  list is newest first and ordinals shift when a document is appended;
+* the property is a canonical subject on `public_events` (municipality
+  code, designation, optional address), not a convention carried in the
+  title;
+* known open cases are re-read on every run once they are older than the
+  refresh interval, so certificates registered after the case started
+  are observed without a second command.
+
 ## 1. Recommendation: CONTINUE_WITH_LIMITATIONS (implement Stockholm next as a single-municipality source)
 
 Stockholm alone meets the quality bar set by the Arbetsmiljöverket
 recurring-inspection signal, and in some respects exceeds it: one plain
 HTTP request lists every supervision case, each case page names the
-device, the property, the address and the district, and the document
-description says in so many words that the recurring inspection was not
-approved ("Intyg återkommande besiktning, ej godkänt, L2992070"). The
+device, the property and the district (and the address on 98 % of them),
+and the document description says in so many words that the recurring
+inspection was not approved ("Intyg återkommande besiktning, ej godkänt, L2992070"). The
 rule that selects those documents matched 2,096 certificates in 13
 months with no false positive in a 40-row manual sample, the source
 shows the later approved certificate and the city's use-prohibition
@@ -310,7 +328,8 @@ as for the Arbetsmiljöverket certificate feed.
 
 ## 10. Buyer identification (VERIFIED source fields, INFERENCE on enrichment)
 
-The source identifies the **property**, not the legal owner:
+The source identifies the **property**, not the legal owner (coverage
+from section 6: designation 100 %, district 100 %, address 98 %):
 
 | Field | Present | Example |
 | --- | --- | --- |
@@ -521,9 +540,9 @@ Not implemented. If continued:
    states "ej godkänt"; 2,096 such documents, no false positive found.
 3. **How many?** About 1,950 failed certificates a year (160 a month),
    1,700 properties in 13 months.
-4. **Exact property and device?** Property designation, address and
-   district on every case; a device identifier on 99.5 % of failed
-   documents, stable across re-inspections.
+4. **Exact property and device?** Property designation and district on
+   every case, a street address on 98 %; a device identifier on 99.5 % of
+   failed documents, stable across re-inspections.
 5. **Remediation completion visible?** Yes, as an approved certificate in
    the case (59 % within 9–12 months) plus the city's reminders; median
    238 days from failure to approval.
